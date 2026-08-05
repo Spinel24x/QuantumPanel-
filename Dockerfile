@@ -1,7 +1,7 @@
 FROM alpine:edge
 
 # ============================================
-# نصب پیش‌نیازها
+# نصب فقط چیزایی که واقعاً لازمه
 # ============================================
 RUN apk add --no-cache \
     openssh \
@@ -9,19 +9,7 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     curl \
-    unzip \
-    wget \
-    bash \
-    gcc \
-    musl-dev \
-    make \
-    linux-headers
-
-# ============================================
-# نصب wstunnel
-# ============================================
-RUN wget -q https://github.com/erebe/wstunnel/releases/latest/download/wstunnel-x64-linux -O /usr/bin/wstunnel && \
-    chmod +x /usr/bin/wstunnel
+    bash
 
 # ============================================
 # تنظیم SSH Server
@@ -38,9 +26,7 @@ RUN ssh-keygen -A && \
     sed -i 's/#ClientAliveCountMax 3/ClientAliveCountMax 3/' /etc/ssh/sshd_config && \
     echo 'Port 2222' >> /etc/ssh/sshd_config && \
     echo 'Port 443' >> /etc/ssh/sshd_config && \
-    echo 'Port 80' >> /etc/ssh/sshd_config && \
-    echo 'AllowStreamLocalForwarding yes' >> /etc/ssh/sshd_config && \
-    echo 'StreamLocalBindUnlink yes' >> /etc/ssh/sshd_config
+    echo 'Port 80' >> /etc/ssh/sshd_config
 
 # ============================================
 # پایتون
@@ -52,6 +38,6 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 COPY . .
 RUN chmod +x /app/start.sh
 
-EXPOSE 8000 2222 443 80 7300 8888
+EXPOSE 8000 2222 443 80
 
 CMD ["/bin/bash", "/app/start.sh"]
