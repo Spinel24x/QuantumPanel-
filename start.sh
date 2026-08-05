@@ -3,12 +3,11 @@ set -e
 
 echo "╔════════════════════════════════════════╗"
 echo "║     🕳️  QUANTUM CORE v2.0  🕳️        ║"
-echo "║   SSH Tunnel Intelligent Engine       ║"
 echo "╚════════════════════════════════════════╝"
 
 mkdir -p /app/data /var/log
 
-# تولید UUID
+# UUID
 if [ ! -f /app/data/uuid.txt ]; then
     python3 -c "import uuid; print(str(uuid.uuid4()))" > /app/data/uuid.txt
 fi
@@ -21,6 +20,7 @@ RAILWAY_HTTP_PORT=${PORT:-8000}
 
 echo "🔐 Domain: $DOMAIN"
 echo "🔐 TCP Port: $RAILWAY_TCP_PORT"
+echo "🔐 Password: $PASSWORD"
 
 # ============================================
 # استارت SSH Server
@@ -31,24 +31,36 @@ sleep 1
 echo "   ✅ SSH on ports: 2222, 443, 80"
 
 # ============================================
-# استارت WebSocket Tunnel
+# تولید کانفیگ
 # ============================================
-echo "🔗 Starting WebSocket Tunnel..."
-wstunnel server ws://0.0.0.0:8888 127.0.0.1:2222 > /var/log/wstunnel.log 2>&1 &
-sleep 1
-echo "   ✅ WS Tunnel on port 8888 → SSH 2222"
+echo "📝 Generating config..."
+python3 -c "
+import json, os
+from pathlib import Path
 
-# ============================================
-# تولید کانفیگ‌ها
-# ============================================
-echo "📝 Generating configurations..."
-python3 /app/config_generator.py 2>/dev/null || echo "   ⚠️ Config generator skipped"
+domain = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')
+tcp_port = os.getenv('RAILWAY_TCP_PORT', '2222')
+password = 'Quantum2024!@#'
+uuid = Path('/app/data/uuid.txt').read_text().strip()
+
+configs = {
+    'domain': domain,
+    'tcp_port': tcp_port,
+    'password': password,
+    'uuid': uuid
+}
+
+Path('/app/data').mkdir(exist_ok=True)
+with open('/app/data/configs.json', 'w') as f:
+    json.dump(configs, f, indent=2)
+
+print(f'   ✅ Config saved: {domain}:{tcp_port}')
+"
 
 echo ""
 echo "╔════════════════════════════════════════╗"
 echo "║   ✅ ALL SERVICES STARTED             ║"
 echo "║   SSH:     2222, 443, 80              ║"
-echo "║   WS:      8888                       ║"
 echo "║   PANEL:   $RAILWAY_HTTP_PORT         ║"
 echo "╚════════════════════════════════════════╝"
 
