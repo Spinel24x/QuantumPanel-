@@ -1,7 +1,7 @@
 FROM alpine:edge
 
 # ============================================
-# نصب همه پیش‌نیازها
+# نصب پیش‌نیازها
 # ============================================
 RUN apk add --no-cache \
     openssh \
@@ -11,25 +11,14 @@ RUN apk add --no-cache \
     curl \
     unzip \
     wget \
-    git \
-    build-base \
-    cmake \
-    linux-headers \
-    bash
+    bash \
+    gcc \
+    musl-dev \
+    make \
+    linux-headers
 
 # ============================================
-# نصب BadVPN (UDP Gateway)
-# ============================================
-RUN cd /tmp && \
-    git clone https://github.com/ambrop72/badvpn.git && \
-    cd badvpn && \
-    cmake -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 . && \
-    make && \
-    cp udpgw/badvpn-udpgw /usr/bin/ && \
-    rm -rf /tmp/badvpn
-
-# ============================================
-# نصب wstunnel (WebSocket Tunnel)
+# نصب wstunnel
 # ============================================
 RUN wget -q https://github.com/erebe/wstunnel/releases/latest/download/wstunnel-x64-linux -O /usr/bin/wstunnel && \
     chmod +x /usr/bin/wstunnel
@@ -49,7 +38,9 @@ RUN ssh-keygen -A && \
     sed -i 's/#ClientAliveCountMax 3/ClientAliveCountMax 3/' /etc/ssh/sshd_config && \
     echo 'Port 2222' >> /etc/ssh/sshd_config && \
     echo 'Port 443' >> /etc/ssh/sshd_config && \
-    echo 'Port 80' >> /etc/ssh/sshd_config
+    echo 'Port 80' >> /etc/ssh/sshd_config && \
+    echo 'AllowStreamLocalForwarding yes' >> /etc/ssh/sshd_config && \
+    echo 'StreamLocalBindUnlink yes' >> /etc/ssh/sshd_config
 
 # ============================================
 # پایتون
@@ -61,6 +52,6 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 COPY . .
 RUN chmod +x /app/start.sh
 
-EXPOSE 8000 2222 443 80 7300
+EXPOSE 8000 2222 443 80 7300 8888
 
 CMD ["/bin/bash", "/app/start.sh"]
