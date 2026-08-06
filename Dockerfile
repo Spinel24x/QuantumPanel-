@@ -1,14 +1,13 @@
 FROM alpine:edge
 
-RUN apk add --no-cache curl bash python3 py3-pip wget
+RUN apk add --no-cache curl bash python3 py3-pip unzip
 
-# ============================================
-# استفاده از udp2raw + tinyfecvpn
-# یا مستقیم socat برای TCP Tunnel
-# ============================================
-
-# socat برای TCP forwarding
-RUN apk add --no-cache socat
+# Xray
+RUN mkdir -p /opt/xray && \
+    curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o /tmp/xray.zip && \
+    unzip /tmp/xray.zip -d /opt/xray && \
+    chmod +x /opt/xray/xray && \
+    rm /tmp/xray.zip
 
 WORKDIR /app
 COPY requirements.txt .
@@ -17,6 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 COPY . .
 RUN chmod +x /app/start.sh
 
-EXPOSE 8443 9000
+EXPOSE 8080 9000
 
 CMD ["/bin/bash", "/app/start.sh"]
