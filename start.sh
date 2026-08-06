@@ -2,12 +2,13 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM v10  🕳️              ║"
-echo "║   Xray:8080 | SSH:22 | Panel:9000    ║"
+echo "║   🕳️  QUANTUM PRO  🕳️              ║"
 echo "╚════════════════════════════════════════╝"
 
-DOMAIN=quantumpanel-production.up.railway.app
 mkdir -p /app/data /etc/xray /var/log /var/run/sshd
+
+# Load info
+DOMAIN=$(python3 -c "import json; print(json.load(open('/app/info.json'))['railway_domain'])")
 
 # UUIDs
 [ ! -f /app/data/uuid.txt ] && cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
@@ -24,9 +25,7 @@ SS_PASS=$(cat /app/data/ss_pass.txt)
 
 echo "🔑 VLESS: $UUID"
 
-# ============================================
-# Xray - همه پروتکل‌ها روی پورت 8080
-# ============================================
+# Xray config
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
@@ -49,43 +48,22 @@ cat > /etc/xray/config.json << XRAYEOF
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray on 0.0.0.0:8080"
+echo "✅ Xray on 8080"
 
-# ============================================
-# SSH Server
-# ============================================
+# SSH
 /usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
-echo "✅ SSH on port 22"
+echo "✅ SSH on 22"
 
-# ============================================
-# Save Info
-# ============================================
+# Update info.json with UUIDs
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
     "uuid_vmess": "$UUID_VMESS",
     "trojan_pass": "$TROJAN_PASS",
-    "ss_pass": "$SS_PASS",
-    "domain": "$DOMAIN",
-    "tcp_host": "metro.proxy.rlwy.net",
-    "tcp_port": 35093,
-    "ssh_host": "sakura.proxy.rlwy.net",
-    "ssh_port": 53742,
-    "paths": {
-        "vless": "/vless",
-        "vmess": "/vmess",
-        "trojan": "/trojan",
-        "ss": "/ss"
-    }
+    "ss_pass": "$SS_PASS"
 }
 EOF
 
-echo ""
-echo "╔════════════════════════════════════════╗"
-echo "║   ✅ ALL SERVICES RUNNING             ║"
-echo "║   Xray:8080 | SSH:22 | Panel:9000     ║"
-echo "╚════════════════════════════════════════╝"
-echo ""
-
+echo "✅ Ready"
 cd /app
 exec python3 -m uvicorn app:app --host 0.0.0.0 --port 9000
