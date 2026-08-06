@@ -8,7 +8,7 @@ echo "╚═══════════════════════�
 
 DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
 TCP_PROXY_PORT=${RAILWAY_TCP_PROXY_PORT:-8443}
-PANEL_PORT=${PORT:-8000}
+PANEL_PORT=${PORT:-9000}
 
 mkdir -p /app/data
 
@@ -40,15 +40,17 @@ fi
 
 sleep 2
 
+CHISEL_OK=false
 if pgrep -f chisel > /dev/null; then
     echo "   ✅ Chisel started (PID: $(pgrep -f chisel))"
+    CHISEL_OK=true
 else
     echo "   ❌ Chisel failed to start"
     cat /var/log/chisel.log
 fi
 
 # ============================================
-# ذخیره info (ws_path اضافه شد)
+# ذخیره info (همه مقادیر یکسان)
 # ============================================
 cat > /app/data/info.json << INFOEOF
 {
@@ -57,6 +59,7 @@ cat > /app/data/info.json << INFOEOF
     "ws_path": "/ws",
     "protocol": "socks5",
     "security": "ws",
+    "chisel_running": $CHISEL_OK,
     "username": "$USERNAME",
     "password": "$PASSWORD"
 }
@@ -67,6 +70,7 @@ echo "╔═══════════════════════�
 echo "║   ✅ CHISEL TUNNEL IS READY           ║"
 echo "║   Port:    8443 (Internal)            ║"
 echo "║   Panel:   $PANEL_PORT                ║"
+echo "║   Status:  $CHISEL_OK                 ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 echo "📱 SOCKS5 Address:"
