@@ -5,23 +5,24 @@ import os
 import json
 from pathlib import Path
 
-app = FastAPI(title="Quantum Chisel Panel")
+app = FastAPI(title="Quantum SlipStream Panel")
 
 # ============================================
-# Helper
+# Helper Functions
 # ============================================
 def load_info():
     try:
         return json.loads(Path("/app/data/info.json").read_text())
     except:
         return {
+            "uuid": "00000000-0000-0000-0000-000000000000",
             "domain": os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost"),
             "port": os.getenv("RAILWAY_TCP_PROXY_PORT", "8443"),
-            "ws_path": "/ws",
-            "security": "ws",
+            "protocol": "slipstream",
+            "transport": "ws",
+            "slipstream_running": False,
             "username": "",
-            "password": "",
-            "chisel_running": False
+            "password": ""
         }
 
 def load_users():
@@ -41,62 +42,61 @@ def save_users(username, password):
 async def get_config():
     info = load_info()
     
+    uuid = info.get("uuid", "")
     domain = info.get("domain", "localhost")
     port = info.get("port", "8443")
     username = info.get("username", "")
     password = info.get("password", "")
-    chisel_running = info.get("chisel_running", False)
-    security = info.get("security", "ws")
+    slipstream_running = info.get("slipstream_running", False)
     
-    # لینک SOCKS5
-    if username and password:
-        socks5_link = f"socks5://{username}:{password}@{domain}:{port}#Quantum-Chisel"
-    else:
-        socks5_link = f"socks5://{domain}:{port}#Quantum-Chisel"
-    
-    # کانفیگ JSON
-    socks5_config = {
-        "protocol": "socks5",
-        "address": domain,
+    # ============================================
+    # کانفیگ SlipNet
+    # ============================================
+    slipnet_config = {
+        "server": domain,
         "port": int(port),
-        "security": security,
-        "username": username if username else None,
-        "password": password if password else None,
-        "chisel_running": chisel_running,
-        "note": "Requires Chisel Client on your device"
+        "uuid": uuid,
+        "protocol": "slipstream",
+        "transport": "ws",
+        "username": username if username else "",
+        "password": password if password else ""
     }
     
+    # ============================================
+    # کانفیگ کلاینت (Termux/PC)
+    # ============================================
+    if username and password:
+        client_command = f"slipstream client --server {domain}:{port} --socks5 127.0.0.1:1080 --auth {username}:{password}"
+    else:
+        client_command = f"slipstream client --server {domain}:{port} --socks5 127.0.0.1:1080"
+    
     return JSONResponse({
-        "socks5_link": socks5_link,
-        "config": socks5_config,
+        "slipnet_config": slipnet_config,
+        "client_command": client_command,
         "status": {
-            "chisel_running": chisel_running,
+            "slipstream_running": slipstream_running,
             "domain": domain,
             "port": port,
-            "security": security
+            "uuid": uuid
         }
     })
 
 @app.post("/api/set-auth")
 async def set_auth(username: str = Form(...), password: str = Form(...)):
     save_users(username, password)
-    
     info = load_info()
     info["username"] = username
     info["password"] = password
     Path("/app/data/info.json").write_text(json.dumps(info))
-    
     return RedirectResponse("/", status_code=303)
 
 @app.post("/api/remove-auth")
 async def remove_auth():
     save_users("", "")
-    
     info = load_info()
     info["username"] = ""
     info["password"] = ""
     Path("/app/data/info.json").write_text(json.dumps(info))
-    
     return RedirectResponse("/", status_code=303)
 
 # ============================================
@@ -107,7 +107,7 @@ async def index(request: Request):
     info = load_info()
     users = load_users()
     
-    chisel_status = "🟢 Running" if info.get("chisel_running") else "🔴 Stopped"
+    slipstream_status = "🟢 Running" if info.get("slipstream_running") else "🔴 Stopped"
     auth_status = "🔐 Enabled" if info.get("username") else "🔓 None"
     
     html = f"""<!DOCTYPE html>
@@ -115,7 +115,7 @@ async def index(request: Request):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quantum Chisel Panel</title>
+    <title>Quantum SlipStream</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
@@ -154,7 +154,7 @@ async def index(request: Request):
         }}
         
         .title {{
-            font-size: 3.5em; font-weight: bold; text-align: center;
+            font-size: 3em; font-weight: bold; text-align: center;
             background: linear-gradient(135deg, #6600cc, #00ccff, #ff00cc, #6600cc);
             background-size: 300% 300%;
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
@@ -212,7 +212,8 @@ async def index(request: Request):
         }}
         
         .config-value {{
-            color: #00ff41; font-size: 0.85em; word-break: break-all; line-height: 1.8;
+            color: #00ff41; font-size: 0.8em; word-break: break-all; line-height: 1.8;
+            white-space: pre-wrap;
         }}
         
         .copy-btn {{
@@ -271,7 +272,7 @@ async def index(request: Request):
         }}
         
         @media (max-width: 768px) {{
-            .title {{ font-size: 2em; }}
+            .title {{ font-size: 1.8em; }}
             .panel-section {{ padding: 20px; }}
         }}
     </style>
@@ -286,11 +287,11 @@ async def index(request: Request):
         
         <div class="panel-section">
             <h1 class="title">QUANTUM</h1>
-            <p class="subtitle"><span class="pulse-dot"></span> CHISEL SOCKS5 TUNNEL <span class="pulse-dot"></span></p>
+            <p class="subtitle"><span class="pulse-dot"></span> SLIPSTREAM TUNNEL <span class="pulse-dot"></span></p>
             
             <div class="info-grid">
                 <div class="info-card">
-                    <div class="label">Domain</div>
+                    <div class="label">Server</div>
                     <div class="value" style="color:#00ccff;">{info['domain']}</div>
                 </div>
                 <div class="info-card">
@@ -299,15 +300,15 @@ async def index(request: Request):
                 </div>
                 <div class="info-card">
                     <div class="label">Protocol</div>
-                    <div class="value" style="color:#00ccff;">SOCKS5</div>
+                    <div class="value" style="color:#00ccff;">SlipStream</div>
                 </div>
                 <div class="info-card">
-                    <div class="label">Security</div>
-                    <div class="value" style="color:#00ccff;">WS</div>
+                    <div class="label">Transport</div>
+                    <div class="value" style="color:#00ccff;">WebSocket</div>
                 </div>
                 <div class="info-card">
-                    <div class="label">Chisel</div>
-                    <div class="value" id="chisel-status" style="color:{'#00ff41' if info.get('chisel_running') else '#ff0040'};">{chisel_status}</div>
+                    <div class="label">Status</div>
+                    <div class="value" style="color:{'#00ff41' if info.get('slipstream_running') else '#ff0040'};">{slipstream_status}</div>
                 </div>
                 <div class="info-card">
                     <div class="label">Auth</div>
@@ -316,38 +317,36 @@ async def index(request: Request):
             </div>
             
             <div class="config-box">
-                <div class="config-label">📱 SOCKS5 Configuration (v2rayNG / Custom)</div>
-                <button class="copy-btn" onclick="copyConfig(this)">COPY</button>
-                <div class="config-value" id="socks5-config">Loading...</div>
+                <div class="config-label">📱 SlipNet Config (Android App)</div>
+                <button class="copy-btn" onclick="copySlipNet(this)">COPY</button>
+                <div class="config-value" id="slipnet-config">Loading...</div>
             </div>
             
             <div class="config-box">
-                <div class="config-label">🔗 SOCKS5 Link</div>
-                <button class="copy-btn" onclick="copyLink(this)">COPY</button>
-                <div class="config-value" id="socks5-link">Loading...</div>
+                <div class="config-label">💻 Client Command (Termux/PC)</div>
+                <button class="copy-btn" onclick="copyCommand(this)">COPY</button>
+                <div class="config-value" id="client-command">Loading...</div>
             </div>
         </div>
         
         <div class="panel-section">
             <h2 style="color:#6600cc; margin-bottom:15px;">🔐 Authentication Settings</h2>
-            
             <form class="auth-form" action="/api/set-auth" method="post">
                 <input type="text" name="username" placeholder="Username (optional)" value="{users.get('username', '')}">
                 <input type="password" name="password" placeholder="Password (optional)" value="{users.get('password', '')}">
                 <div style="display:flex; gap:10px;">
-                    <button type="submit" class="btn">💾 Save & Restart</button>
+                    <button type="submit" class="btn">💾 Save & Redeploy</button>
                     <button type="button" class="btn btn-danger" onclick="removeAuth()">🗑️ Remove Auth</button>
                 </div>
             </form>
-            <p style="color:#666; font-size:0.7em; margin-top:10px;">⚠️ Changing auth requires server restart.</p>
         </div>
         
-        <p class="footer">⬡ QUANTUM CHISEL ⬡ SOCKS5 + WS ⬡</p>
+        <p class="footer">⬡ QUANTUM SLIPSTREAM ⬡ WEB SOCKET TUNNEL ⬡</p>
     </div>
     
     <script>
         // ============================================
-        // Matrix Lines
+        // Matrix Lines Canvas
         // ============================================
         const matrixCanvas = document.getElementById('matrixCanvas');
         const matrixCtx = matrixCanvas.getContext('2d');
@@ -385,7 +384,9 @@ async def index(request: Request):
         animateMatrix();
         window.addEventListener('resize',()=>{{matrixCanvas.width=window.innerWidth;matrixCanvas.height=window.innerHeight;}});
         
-        // Blackhole
+        // ============================================
+        // Blackhole Canvas
+        // ============================================
         const bhCanvas=document.getElementById('blackholeCanvas'),bhCtx=bhCanvas.getContext('2d'),cx=250,cy=175;
         function drawBlackhole(time){{
             bhCtx.clearRect(0,0,bhCanvas.width,bhCanvas.height);
@@ -408,22 +409,20 @@ async def index(request: Request):
         requestAnimationFrame(animateBlackhole);
         
         // ============================================
-        // Load configs
+        // Load Configs
         // ============================================
-        let socks5Config, socks5Link;
+        let slipnetConfig, clientCommand;
         async function loadConfigs(){{
             try{{
                 const r=await fetch('/api/config'),d=await r.json();
-                socks5Config=JSON.stringify(d.config,null,2);
-                socks5Link=d.socks5_link;
-                document.getElementById('socks5-config').textContent=socks5Config;
-                document.getElementById('socks5-link').textContent=socks5Link;
-                document.getElementById('chisel-status').textContent=d.status.chisel_running ? '🟢 Running' : '🔴 Stopped';
-                document.getElementById('chisel-status').style.color=d.status.chisel_running ? '#00ff41' : '#ff0040';
-            }}catch(e){{document.getElementById('socks5-config').textContent='Error loading...';}}
+                slipnetConfig=JSON.stringify(d.slipnet_config,null,2);
+                clientCommand=d.client_command;
+                document.getElementById('slipnet-config').textContent=slipnetConfig;
+                document.getElementById('client-command').textContent=clientCommand;
+            }}catch(e){{document.getElementById('slipnet-config').textContent='Error loading...';}}
         }}
-        function copyConfig(b){{if(socks5Config){{navigator.clipboard.writeText(socks5Config);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
-        function copyLink(b){{if(socks5Link){{navigator.clipboard.writeText(socks5Link);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
+        function copySlipNet(b){{if(slipnetConfig){{navigator.clipboard.writeText(slipnetConfig);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
+        function copyCommand(b){{if(clientCommand){{navigator.clipboard.writeText(clientCommand);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
         function removeAuth(){{fetch('/api/remove-auth',{{method:'POST'}}).then(()=>location.reload());}}
         
         loadConfigs();
