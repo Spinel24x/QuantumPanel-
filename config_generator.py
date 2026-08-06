@@ -1,21 +1,18 @@
 import json, base64
 
 def load_info():
-    # اول از data/info.json (UUID ها و پسوردها)
     try:
         with open("/app/data/info.json") as f:
             data_info = json.load(f)
     except:
         data_info = {}
     
-    # بعد از info.json (تنظیمات پایه)
     try:
         with open("/app/info.json") as f:
             base_info = json.load(f)
     except:
         base_info = {}
     
-    # ترکیب هر دو
     return {**base_info, **data_info}
 
 def load_ips():
@@ -88,27 +85,40 @@ def generate_trojan(password, conn):
 
 def generate_ss(password, conn):
     ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
-    return f"ss://{ss_b64}@{conn['address']}:{conn['port']}?path=/ss&host={conn['host']}#Quantum"
+    
+    # لینک استاندارد با host و path
+    link = f"ss://{ss_b64}@{conn['address']}:{conn['port']}?path=/ss&host={conn['host']}#Quantum"
+    
+    # JSON config برای v2rayNG
+    json_config = {
+        "servers": [{
+            "address": conn['address'],
+            "port": conn['port'],
+            "method": "aes-256-gcm",
+            "password": password,
+            "plugin": "v2ray-plugin",
+            "plugin_opts": f"path=/ss;host={conn['host']}"
+        }]
+    }
+    
+    return {
+        "link": link,
+        "config": json.dumps(json_config, indent=2)
+    }
 
 def generate_all(uuid, uuid_vmess, trojan_pass, ss_pass, use_cf=False, clean_ip="", sni=""):
     conn = build_connection(use_cf, clean_ip, sni)
     
+    ss_data = generate_ss(ss_pass, conn)
+    
     return {
-        "vless": {
-            "name": "VLESS", "icon": "🟣",
-            "link": generate_vless(uuid, conn)
-        },
-        "vmess": {
-            "name": "VMess", "icon": "🟠",
-            "link": generate_vmess(uuid_vmess, conn)
-        },
-        "trojan": {
-            "name": "Trojan", "icon": "🔴",
-            "link": generate_trojan(trojan_pass, conn)
-        },
+        "vless": {"name": "VLESS", "icon": "🟣", "link": generate_vless(uuid, conn)},
+        "vmess": {"name": "VMess", "icon": "🟠", "link": generate_vmess(uuid_vmess, conn)},
+        "trojan": {"name": "Trojan", "icon": "🔴", "link": generate_trojan(trojan_pass, conn)},
         "ss": {
             "name": "Shadowsocks", "icon": "🟡",
-            "link": generate_ss(ss_pass, conn)
+            "link": ss_data["link"],
+            "config": ss_data["config"]
         },
         "connection": conn
     }
