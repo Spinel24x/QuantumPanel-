@@ -2,58 +2,45 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM + NGINX TLS  🕳️      ║"
+echo "║   🕳️  QUANTUM v10  🕳️              ║"
+echo "║   Xray:8080 | SSH:22 | Panel:9000    ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=quantumpanel-production.up.railway.app
-mkdir -p /app/data /etc/xray /var/log/nginx /app/certs
+mkdir -p /app/data /etc/xray /var/log /var/run/sshd
 
 # UUIDs
-if [ ! -f /app/data/uuid.txt ]; then
-    cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
-fi
+[ ! -f /app/data/uuid.txt ] && cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
 UUID=$(cat /app/data/uuid.txt)
 
-if [ ! -f /app/data/uuid_vmess.txt ]; then
-    cat /proc/sys/kernel/random/uuid > /app/data/uuid_vmess.txt
-fi
+[ ! -f /app/data/uuid_vmess.txt ] && cat /proc/sys/kernel/random/uuid > /app/data/uuid_vmess.txt
 UUID_VMESS=$(cat /app/data/uuid_vmess.txt)
 
-if [ ! -f /app/data/trojan_pass.txt ]; then
-    cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/trojan_pass.txt
-fi
+[ ! -f /app/data/trojan_pass.txt ] && cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/trojan_pass.txt
 TROJAN_PASS=$(cat /app/data/trojan_pass.txt)
 
-if [ ! -f /app/data/ss_pass.txt ]; then
-    cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/ss_pass.txt
-fi
+[ ! -f /app/data/ss_pass.txt ] && cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/ss_pass.txt
 SS_PASS=$(cat /app/data/ss_pass.txt)
 
-echo "🔑 UUID: $UUID"
-
-# SSL Certificate
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-  -keyout /app/certs/key.pem -out /app/certs/cert.pem \
-  -subj "/CN=$DOMAIN" 2>/dev/null
-echo "✅ SSL Certificate"
+echo "🔑 VLESS: $UUID"
 
 # ============================================
-# Xray روی 10000
+# Xray - همه پروتکل‌ها روی پورت 8080
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
     "inbounds": [
-        {"port": 10000, "listen": "127.0.0.1", "protocol": "vless",
+        {"port": 8080, "listen": "0.0.0.0", "protocol": "vless",
             "settings": {"clients": [{"id": "$UUID", "level": 0}], "decryption": "none"},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"}}},
-        {"port": 10000, "listen": "127.0.0.1", "protocol": "vmess",
+        {"port": 8080, "listen": "0.0.0.0", "protocol": "vmess",
             "settings": {"clients": [{"id": "$UUID_VMESS", "level": 0}]},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}}},
-        {"port": 10000, "listen": "127.0.0.1", "protocol": "trojan",
+        {"port": 8080, "listen": "0.0.0.0", "protocol": "trojan",
             "settings": {"clients": [{"password": "$TROJAN_PASS"}]},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}},
-        {"port": 10000, "listen": "127.0.0.1", "protocol": "shadowsocks",
+        {"port": 8080, "listen": "0.0.0.0", "protocol": "shadowsocks",
             "settings": {"method": "aes-256-gcm", "password": "$SS_PASS"},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}}
     ],
@@ -62,18 +49,17 @@ cat > /etc/xray/config.json << XRAYEOF
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray on 127.0.0.1:10000"
+echo "✅ Xray on 0.0.0.0:8080"
 
 # ============================================
-# Nginx روی 8443
+# SSH Server
 # ============================================
-cp /app/nginx.conf /etc/nginx/nginx.conf
-mkdir -p /var/log/nginx /var/lib/nginx
-nginx -t 2>/dev/null || true
-nginx -g "daemon off;" &
-echo "✅ Nginx on 0.0.0.0:8443 (TLS→WS)"
+/usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
+echo "✅ SSH on port 22"
 
-# Save
+# ============================================
+# Save Info
+# ============================================
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
@@ -81,16 +67,23 @@ cat > /app/data/info.json << EOF
     "trojan_pass": "$TROJAN_PASS",
     "ss_pass": "$SS_PASS",
     "domain": "$DOMAIN",
-    "vless": {"path": "/vless"},
-    "vmess": {"path": "/vmess"},
-    "trojan": {"path": "/trojan"},
-    "ss": {"path": "/ss"}
+    "tcp_host": "metro.proxy.rlwy.net",
+    "tcp_port": 35093,
+    "ssh_host": "sakura.proxy.rlwy.net",
+    "ssh_port": 53742,
+    "paths": {
+        "vless": "/vless",
+        "vmess": "/vmess",
+        "trojan": "/trojan",
+        "ss": "/ss"
+    }
 }
 EOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   ✅ NGINX:8443 → XRAY:10000          ║"
+echo "║   ✅ ALL SERVICES RUNNING             ║"
+echo "║   Xray:8080 | SSH:22 | Panel:9000     ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
