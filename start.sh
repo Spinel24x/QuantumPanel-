@@ -2,12 +2,13 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM PANEL v6  🕳️         ║"
+echo "║   🕳️  QUANTUM + NGINX + TLS  🕳️     ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=quantumpanel-production.up.railway.app
-mkdir -p /app/data /etc/xray /var/log /var/run/sshd /etc/wireguard
+mkdir -p /app/data /etc/xray /var/log/nginx /app/certs
 
+# UUIDs
 if [ ! -f /app/data/uuid.txt ]; then
     cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
 fi
@@ -23,82 +24,73 @@ if [ ! -f /app/data/trojan_pass.txt ]; then
 fi
 TROJAN_PASS=$(cat /app/data/trojan_pass.txt)
 
-echo "🔑 VLESS: $UUID"
-echo "🔑 VMess: $UUID_VMESS"
+if [ ! -f /app/data/ss_pass.txt ]; then
+    cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/ss_pass.txt
+fi
+SS_PASS=$(cat /app/data/ss_pass.txt)
 
+echo "🔑 VLESS: $UUID"
+
+# SSL
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout /app/certs/key.pem -out /app/certs/cert.pem \
+  -subj "/CN=$DOMAIN" 2>/dev/null
+echo "✅ SSL Certificate"
+
+# ============================================
+# Xray
+# ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
     "inbounds": [
-        {"port": 8443, "listen": "0.0.0.0", "protocol": "vless",
+        {"port": 10000, "listen": "127.0.0.1", "protocol": "vless",
             "settings": {"clients": [{"id": "$UUID", "level": 0}], "decryption": "none"},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"}}},
-        {"port": 8443, "listen": "0.0.0.0", "protocol": "vmess",
+        {"port": 10000, "listen": "127.0.0.1", "protocol": "vmess",
             "settings": {"clients": [{"id": "$UUID_VMESS", "level": 0}]},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}}},
-        {"port": 8443, "listen": "0.0.0.0", "protocol": "trojan",
+        {"port": 10000, "listen": "127.0.0.1", "protocol": "trojan",
             "settings": {"clients": [{"password": "$TROJAN_PASS"}]},
-            "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}}
+            "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}},
+        {"port": 10000, "listen": "127.0.0.1", "protocol": "shadowsocks",
+            "settings": {"method": "aes-256-gcm", "password": "$SS_PASS"},
+            "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}}
     ],
     "outbounds": [{"protocol": "freedom", "tag": "direct"}]
 }
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray: VLESS, VMess, Trojan on 8443"
+echo "✅ Xray on 127.0.0.1:10000"
 
-# WireGuard
-PRIVATE_KEY=$(wg genkey)
-PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
-CLIENT_PRIVATE=$(wg genkey)
-CLIENT_PUBLIC=$(echo "$CLIENT_PRIVATE" | wg pubkey)
+# ============================================
+# Nginx
+# ============================================
+cp /app/nginx.conf /etc/nginx/nginx.conf
+nginx -g "daemon off;" &
+echo "✅ Nginx on 0.0.0.0:8443 (TLS)"
 
-ip link add wg0 type wireguard 2>/dev/null || true
-ip addr add 10.0.0.1/24 dev wg0 2>/dev/null || true
-
-cat > /etc/wireguard/wg0.conf << WGEOF
-[Interface]
-PrivateKey = $PRIVATE_KEY
-ListenPort = 51820
-Address = 10.0.0.1/24
-PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-
-[Peer]
-PublicKey = $CLIENT_PUBLIC
-AllowedIPs = 10.0.0.2/32
-WGEOF
-
-wg-quick up wg0 2>/dev/null || true
-echo "✅ WireGuard on UDP 51820"
-
-# udp2raw
-udp2raw -s -l 0.0.0.0:5555 -r 127.0.0.1:51820 --raw-mode faketcp -k "wgkey123" &
-echo "✅ udp2raw on TCP 5555"
-
-# SSH
-/usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
-echo "✅ SSH on port 22"
-
+# ============================================
+# Save Info
+# ============================================
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
     "uuid_vmess": "$UUID_VMESS",
     "trojan_pass": "$TROJAN_PASS",
+    "ss_pass": "$SS_PASS",
     "domain": "$DOMAIN",
-    "server_public_key": "$PUBLIC_KEY",
-    "client_private_key": "$CLIENT_PRIVATE",
-    "vless": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/vless"},
-    "vmess": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/vmess"},
-    "trojan": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/trojan"},
-    "wireguard": {"host": "sakura.proxy.rlwy.net", "port": 53742},
-    "ssh": {"host": "sakura.proxy.rlwy.net", "port": 53742, "user": "root", "pass": "quantum123"}
+    "vless": {"path": "/vless"},
+    "vmess": {"path": "/vmess"},
+    "trojan": {"path": "/trojan"},
+    "ss": {"path": "/ss"}
 }
 EOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   5 PROTOCOLS RUNNING                 ║"
+echo "║   4 PROTOCOLS + TLS + NGINX           ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
