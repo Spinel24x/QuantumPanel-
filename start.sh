@@ -7,10 +7,14 @@ echo "╚═══════════════════════�
 
 mkdir -p /app/data /etc/xray /var/log /var/run/sshd
 
-# Load info
-DOMAIN=$(python3 -c "import json; print(json.load(open('/app/info.json'))['railway_domain'])")
+# Load info from base config
+if [ -f /app/info.json ]; then
+    DOMAIN=$(python3 -c "import json; print(json.load(open('/app/info.json'))['railway_domain'])")
+else
+    DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
+fi
 
-# UUIDs
+# UUIDs - تولید اگر وجود نداشته باشن
 [ ! -f /app/data/uuid.txt ] && cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
 UUID=$(cat /app/data/uuid.txt)
 
@@ -23,7 +27,10 @@ TROJAN_PASS=$(cat /app/data/trojan_pass.txt)
 [ ! -f /app/data/ss_pass.txt ] && cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/ss_pass.txt
 SS_PASS=$(cat /app/data/ss_pass.txt)
 
-echo "🔑 VLESS: $UUID"
+echo "🔑 VLESS UUID: $UUID"
+echo "🔑 VMess UUID: $UUID_VMESS"
+echo "🔑 Trojan Pass: $TROJAN_PASS"
+echo "🔑 SS Pass: $SS_PASS"
 
 # Xray config
 cat > /etc/xray/config.json << XRAYEOF
@@ -54,7 +61,9 @@ echo "✅ Xray on 8080"
 /usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
 echo "✅ SSH on 22"
 
-# Update info.json with UUIDs
+# ============================================
+# ذخیره info.json کامل با UUID و پسوردها
+# ============================================
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
@@ -64,6 +73,7 @@ cat > /app/data/info.json << EOF
 }
 EOF
 
-echo "✅ Ready"
+echo "✅ Info saved with all UUIDs and passwords"
+echo ""
 cd /app
 exec python3 -m uvicorn app:app --host 0.0.0.0 --port 9000
