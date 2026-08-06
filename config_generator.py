@@ -83,42 +83,27 @@ def generate_trojan(password, conn):
     link += f"&type=ws&host={conn['host']}&path=/trojan#Quantum"
     return link
 
-def generate_ss(password, conn):
+def generate_ss_ws(password, conn):
     ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
-    
-    # لینک استاندارد با host و path
     link = f"ss://{ss_b64}@{conn['address']}:{conn['port']}?path=/ss&host={conn['host']}#Quantum"
-    
-    # JSON config برای v2rayNG
-    json_config = {
-        "servers": [{
-            "address": conn['address'],
-            "port": conn['port'],
-            "method": "aes-256-gcm",
-            "password": password,
-            "plugin": "v2ray-plugin",
-            "plugin_opts": f"path=/ss;host={conn['host']}"
-        }]
-    }
-    
-    return {
-        "link": link,
-        "config": json.dumps(json_config, indent=2)
-    }
+    return link
+
+def generate_ss_tcp(password, info):
+    ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
+    host = info.get("ss_tcp_host", "")
+    port = info.get("ss_tcp_port", 53742)
+    link = f"ss://{ss_b64}@{host}:{port}?network=tcp#Quantum-SS-TCP"
+    return link
 
 def generate_all(uuid, uuid_vmess, trojan_pass, ss_pass, use_cf=False, clean_ip="", sni=""):
+    info = load_info()
     conn = build_connection(use_cf, clean_ip, sni)
-    
-    ss_data = generate_ss(ss_pass, conn)
     
     return {
         "vless": {"name": "VLESS", "icon": "🟣", "link": generate_vless(uuid, conn)},
         "vmess": {"name": "VMess", "icon": "🟠", "link": generate_vmess(uuid_vmess, conn)},
         "trojan": {"name": "Trojan", "icon": "🔴", "link": generate_trojan(trojan_pass, conn)},
-        "ss": {
-            "name": "Shadowsocks", "icon": "🟡",
-            "link": ss_data["link"],
-            "config": ss_data["config"]
-        },
+        "ss_ws": {"name": "Shadowsocks WS", "icon": "🟡", "link": generate_ss_ws(ss_pass, conn)},
+        "ss_tcp": {"name": "Shadowsocks TCP", "icon": "🟢", "link": generate_ss_tcp(ss_pass, info)},
         "connection": conn
     }
