@@ -1,31 +1,26 @@
 FROM alpine:edge
 
-RUN apk add --no-cache curl bash python3 py3-pip unzip openssh
+RUN apk add --no-cache curl bash python3 py3-pip unzip openssh openssl
 
 # Xray
 RUN mkdir -p /opt/xray && \
     curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o /tmp/xray.zip && \
     unzip /tmp/xray.zip -d /opt/xray && \
-    chmod +x /opt/xray/xray && \
-    rm /tmp/xray.zip
+    chmod +x /opt/xray/xray && rm /tmp/xray.zip
+
+# Hysteria2
+RUN curl -L https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -o /usr/bin/hysteria && \
+    chmod +x /usr/bin/hysteria
 
 # SSH
-RUN ssh-keygen -A && \
-    echo 'root:quantum123' | chpasswd && \
+RUN ssh-keygen -A && echo 'root:quantum123' | chpasswd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
     echo 'AllowTcpForwarding yes' >> /etc/ssh/sshd_config
 
-# Chisel
-RUN wget -q https://github.com/jpillora/chisel/releases/download/v1.10.1/chisel_1.10.1_linux_amd64.gz -O /tmp/chisel.gz && \
-    gunzip /tmp/chisel.gz && \
-    mv /tmp/chisel /usr/bin/chisel && \
-    chmod +x /usr/bin/chisel
-
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
-
 COPY . .
 RUN chmod +x /app/start.sh
 
