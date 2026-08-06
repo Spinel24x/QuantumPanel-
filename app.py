@@ -1,14 +1,14 @@
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 import os
 import json
 from pathlib import Path
 
-app = FastAPI(title="Quantum SlipStream Panel")
+app = FastAPI(title="Quantum VLESS Panel")
 
 # ============================================
-# Helper Functions
+# Helper
 # ============================================
 def load_info():
     try:
@@ -17,87 +17,87 @@ def load_info():
         return {
             "uuid": "00000000-0000-0000-0000-000000000000",
             "domain": os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost"),
-            "port": os.getenv("RAILWAY_TCP_PROXY_PORT", "8443"),
-            "protocol": "slipstream",
-            "transport": "ws",
-            "slipstream_running": False,
-            "username": "",
-            "password": ""
+            "ws_path": "/ws",
+            "xray_running": False,
+            "default_clean_ips": ["104.26.0.1", "1.1.1.1"],
+            "default_sni": "www.speedtest.net"
         }
-
-def load_users():
-    try:
-        return json.loads(Path("/app/data/users.json").read_text())
-    except:
-        return {"username": "", "password": ""}
-
-def save_users(username, password):
-    Path("/app/data").mkdir(exist_ok=True)
-    Path("/app/data/users.json").write_text(json.dumps({"username": username, "password": password}))
 
 # ============================================
 # API
 # ============================================
 @app.get("/api/config")
-async def get_config():
+async def get_config(
+    address: str = "",
+    sni: str = "",
+    host: str = "",
+    ws_path: str = ""
+):
     info = load_info()
     
     uuid = info.get("uuid", "")
     domain = info.get("domain", "localhost")
-    port = info.get("port", "8443")
-    username = info.get("username", "")
-    password = info.get("password", "")
-    slipstream_running = info.get("slipstream_running", False)
     
-    # ============================================
-    # کانفیگ SlipNet
-    # ============================================
-    slipnet_config = {
-        "server": domain,
-        "port": int(port),
-        "uuid": uuid,
-        "protocol": "slipstream",
-        "transport": "ws",
-        "username": username if username else "",
-        "password": password if password else ""
+    # مقادیر پیش‌فرض
+    if not address:
+        address = info.get("default_clean_ips", ["104.26.0.1"])[0]
+    if not sni:
+        sni = info.get("default_sni", "www.speedtest.net")
+    if not host:
+        host = domain
+    if not ws_path:
+        ws_path = info.get("ws_path", "/ws")
+    
+    # لینک VLESS با TLS
+    vless_link = f"vless://{uuid}@{address}:443?encryption=none&security=tls&sni={sni}&fp=chrome&type=ws&host={host}&path={ws_path}#Quantum-VLESS"
+    
+    # کانفیگ JSON
+    json_config = {
+        "outbounds": [{
+            "protocol": "vless",
+            "settings": {
+                "vnext": [{
+                    "address": address,
+                    "port": 443,
+                    "users": [{
+                        "id": uuid,
+                        "encryption": "none",
+                        "level": 0
+                    }]
+                }]
+            },
+            "streamSettings": {
+                "network": "ws",
+                "security": "tls",
+                "tlsSettings": {
+                    "serverName": sni,
+                    "fingerprint": "chrome",
+                    "allowInsecure": False
+                },
+                "wsSettings": {
+                    "path": ws_path,
+                    "headers": {"Host": host}
+                }
+            },
+            "tag": "proxy"
+        }]
     }
     
-    # ============================================
-    # کانفیگ کلاینت (Termux/PC)
-    # ============================================
-    if username and password:
-        client_command = f"slipstream client --server {domain}:{port} --socks5 127.0.0.1:1080 --auth {username}:{password}"
-    else:
-        client_command = f"slipstream client --server {domain}:{port} --socks5 127.0.0.1:1080"
-    
     return JSONResponse({
-        "slipnet_config": slipnet_config,
-        "client_command": client_command,
-        "status": {
-            "slipstream_running": slipstream_running,
-            "domain": domain,
-            "port": port,
-            "uuid": uuid
+        "vless_link": vless_link,
+        "json_config": json_config,
+        "config": {
+            "address": address,
+            "port": 443,
+            "uuid": uuid,
+            "sni": sni,
+            "host": host,
+            "path": ws_path,
+            "security": "tls",
+            "type": "ws",
+            "fingerprint": "chrome"
         }
     })
-
-@app.post("/api/set-auth")
-async def set_auth(username: str = Form(...), password: str = Form(...)):
-    save_users(username, password)
-    info = load_info()
-    info["username"] = username
-    info["password"] = password
-    Path("/app/data/info.json").write_text(json.dumps(info))
-    return RedirectResponse("/", status_code=303)
-
-@app.post("/api/remove-auth")
-async def remove_auth():
-    save_users("", "")
-    info = load_info()
-    info["username"] = ""
-    info["password"] = ""
-    Path("/app/data/info.json").write_text(json.dumps(info))
-    return RedirectResponse("/", status_code=303)
 
 # ============================================
 # صفحه اصلی
@@ -105,17 +105,13 @@ async def remove_auth():
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     info = load_info()
-    users = load_users()
-    
-    slipstream_status = "🟢 Running" if info.get("slipstream_running") else "🔴 Stopped"
-    auth_status = "🔐 Enabled" if info.get("username") else "🔓 None"
     
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quantum SlipStream</title>
+    <title>Quantum VLESS Panel</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
@@ -154,7 +150,7 @@ async def index(request: Request):
         }}
         
         .title {{
-            font-size: 3em; font-weight: bold; text-align: center;
+            font-size: 2.5em; font-weight: bold; text-align: center;
             background: linear-gradient(135deg, #6600cc, #00ccff, #ff00cc, #6600cc);
             background-size: 300% 300%;
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
@@ -173,73 +169,24 @@ async def index(request: Request):
             margin-bottom: 20px; font-size: 0.85em; letter-spacing: 4px;
         }}
         
-        .info-grid {{
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 12px; margin-bottom: 25px;
+        .form-group {{
+            margin-bottom: 15px;
         }}
         
-        .info-card {{
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid rgba(102, 0, 204, 0.2);
-            border-radius: 12px; padding: 15px; text-align: center;
-            transition: all 0.3s;
+        .form-group label {{
+            display: block; color: #6600cc; font-size: 0.8em;
+            text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;
         }}
         
-        .info-card:hover {{
-            border-color: rgba(102, 0, 204, 0.6);
-            box-shadow: 0 0 20px rgba(102, 0, 204, 0.2);
-        }}
-        
-        .info-card .label {{
-            color: #666; font-size: 0.7em; text-transform: uppercase;
-            letter-spacing: 1px; margin-bottom: 5px;
-        }}
-        
-        .info-card .value {{
-            font-weight: bold; font-size: 0.9em; word-break: break-all;
-        }}
-        
-        .config-box {{
-            background: rgba(0, 0, 0, 0.7);
-            border: 1px solid rgba(102, 0, 204, 0.2);
-            border-radius: 12px; padding: 20px; margin-bottom: 15px;
-            position: relative;
-        }}
-        
-        .config-label {{
-            color: #6600cc; font-weight: bold; font-size: 0.8em;
-            margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px;
-        }}
-        
-        .config-value {{
-            color: #00ff41; font-size: 0.8em; word-break: break-all; line-height: 1.8;
-            white-space: pre-wrap;
-        }}
-        
-        .copy-btn {{
-            position: absolute; top: 10px; right: 10px;
-            background: #6600cc; color: white; border: none;
-            padding: 8px 18px; border-radius: 20px; cursor: pointer;
-            font-family: 'Courier New', monospace; font-size: 0.75em;
-            transition: all 0.3s; letter-spacing: 1px;
-        }}
-        
-        .copy-btn:hover {{ background: #9900ff; box-shadow: 0 0 25px rgba(102, 0, 204, 0.6); transform: scale(1.05); }}
-        .copy-btn.copied {{ background: #00ff41; color: #000; }}
-        
-        .auth-form {{
-            display: flex; flex-direction: column; gap: 12px;
-        }}
-        
-        .auth-form input {{
+        .form-group input {{
+            width: 100%; padding: 12px;
             background: rgba(0, 0, 0, 0.6);
             border: 1px solid rgba(102, 0, 204, 0.3);
-            border-radius: 8px; padding: 12px;
-            color: #00ccff; font-family: 'Courier New', monospace;
-            font-size: 0.9em;
+            border-radius: 8px; color: #00ccff;
+            font-family: 'Courier New', monospace; font-size: 0.9em;
         }}
         
-        .auth-form input:focus {{
+        .form-group input:focus {{
             outline: none; border-color: #6600cc;
             box-shadow: 0 0 15px rgba(102, 0, 204, 0.3);
         }}
@@ -248,27 +195,44 @@ async def index(request: Request):
             background: #6600cc; color: white; border: none;
             padding: 12px 24px; border-radius: 20px; cursor: pointer;
             font-family: 'Courier New', monospace; font-size: 0.85em;
-            transition: all 0.3s; letter-spacing: 1px;
+            transition: all 0.3s; letter-spacing: 1px; width: 100%;
+            margin-top: 10px;
         }}
         
-        .btn:hover {{ background: #9900ff; box-shadow: 0 0 20px rgba(102, 0, 204, 0.5); }}
-        .btn-danger {{ background: #cc0066; }}
-        .btn-danger:hover {{ background: #ff0099; }}
+        .btn:hover {{ background: #9900ff; box-shadow: 0 0 20px rgba(102, 0, 204, 0.5); transform: scale(1.02); }}
+        .btn-green {{ background: #00cc66; }}
+        .btn-green:hover {{ background: #00ff80; }}
+        
+        .result-box {{
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(102, 0, 204, 0.2);
+            border-radius: 12px; padding: 20px; margin-top: 20px;
+            display: none; position: relative;
+        }}
+        
+        .result-box .label {{
+            color: #6600cc; font-size: 0.8em; text-transform: uppercase;
+            letter-spacing: 2px; margin-bottom: 10px;
+        }}
+        
+        .result-box .value {{
+            color: #00ff41; font-size: 0.8em; word-break: break-all; line-height: 1.8;
+        }}
+        
+        .copy-btn {{
+            position: absolute; top: 10px; right: 10px;
+            background: #6600cc; color: white; border: none;
+            padding: 8px 18px; border-radius: 20px; cursor: pointer;
+            font-family: 'Courier New', monospace; font-size: 0.75em;
+            transition: all 0.3s;
+        }}
+        
+        .copy-btn:hover {{ background: #9900ff; box-shadow: 0 0 20px rgba(102, 0, 204, 0.5); }}
+        .copy-btn.copied {{ background: #00ff41; color: #000; }}
         
         .footer {{
             text-align: center; margin-top: 40px; color: #333;
             font-size: 0.7em; letter-spacing: 3px;
-        }}
-        
-        .pulse-dot {{
-            display: inline-block; width: 8px; height: 8px;
-            background: #00ff41; border-radius: 50%;
-            animation: pulse 1.5s ease-in-out infinite; margin-right: 5px;
-        }}
-        
-        @keyframes pulse {{
-            0%, 100% {{ opacity: 1; box-shadow: 0 0 10px #00ff41; }}
-            50% {{ opacity: 0.3; box-shadow: 0 0 30px #00ff41; }}
         }}
         
         @media (max-width: 768px) {{
@@ -287,67 +251,48 @@ async def index(request: Request):
         
         <div class="panel-section">
             <h1 class="title">QUANTUM</h1>
-            <p class="subtitle"><span class="pulse-dot"></span> SLIPSTREAM TUNNEL <span class="pulse-dot"></span></p>
+            <p class="subtitle">⚡ VLESS + TLS + WS + Clean IP ⚡</p>
             
-            <div class="info-grid">
-                <div class="info-card">
-                    <div class="label">Server</div>
-                    <div class="value" style="color:#00ccff;">{info['domain']}</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Port</div>
-                    <div class="value" style="color:#00ccff;">{info['port']}</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Protocol</div>
-                    <div class="value" style="color:#00ccff;">SlipStream</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Transport</div>
-                    <div class="value" style="color:#00ccff;">WebSocket</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Status</div>
-                    <div class="value" style="color:{'#00ff41' if info.get('slipstream_running') else '#ff0040'};">{slipstream_status}</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Auth</div>
-                    <div class="value" style="color:#00ccff;">{auth_status}</div>
-                </div>
+            <div class="form-group">
+                <label>Address (Clean IP / Domain)</label>
+                <input type="text" id="address" value="{info.get('default_clean_ips', ['104.26.0.1'])[0]}" placeholder="104.26.0.1">
             </div>
             
-            <div class="config-box">
-                <div class="config-label">📱 SlipNet Config (Android App)</div>
-                <button class="copy-btn" onclick="copySlipNet(this)">COPY</button>
-                <div class="config-value" id="slipnet-config">Loading...</div>
+            <div class="form-group">
+                <label>SNI</label>
+                <input type="text" id="sni" value="{info.get('default_sni', 'www.speedtest.net')}" placeholder="www.speedtest.net">
             </div>
             
-            <div class="config-box">
-                <div class="config-label">💻 Client Command (Termux/PC)</div>
-                <button class="copy-btn" onclick="copyCommand(this)">COPY</button>
-                <div class="config-value" id="client-command">Loading...</div>
+            <div class="form-group">
+                <label>Host</label>
+                <input type="text" id="host" value="{info.get('domain', '')}" placeholder="your-domain.com">
+            </div>
+            
+            <div class="form-group">
+                <label>WebSocket Path</label>
+                <input type="text" id="ws_path" value="{info.get('ws_path', '/ws')}" placeholder="/ws">
+            </div>
+            
+            <button class="btn" onclick="generateConfig()">🚀 Generate VLESS Config</button>
+            
+            <div class="result-box" id="result-box">
+                <div class="label">🔗 VLESS Link</div>
+                <button class="copy-btn" onclick="copyLink()">COPY</button>
+                <div class="value" id="vless-link"></div>
+            </div>
+            
+            <div class="result-box" id="json-box">
+                <div class="label">📱 JSON Config (v2rayNG)</div>
+                <button class="copy-btn" onclick="copyJSON()">COPY</button>
+                <div class="value" id="json-config" style="max-height: 300px; overflow-y: auto;"></div>
             </div>
         </div>
         
-        <div class="panel-section">
-            <h2 style="color:#6600cc; margin-bottom:15px;">🔐 Authentication Settings</h2>
-            <form class="auth-form" action="/api/set-auth" method="post">
-                <input type="text" name="username" placeholder="Username (optional)" value="{users.get('username', '')}">
-                <input type="password" name="password" placeholder="Password (optional)" value="{users.get('password', '')}">
-                <div style="display:flex; gap:10px;">
-                    <button type="submit" class="btn">💾 Save & Redeploy</button>
-                    <button type="button" class="btn btn-danger" onclick="removeAuth()">🗑️ Remove Auth</button>
-                </div>
-            </form>
-        </div>
-        
-        <p class="footer">⬡ QUANTUM SLIPSTREAM ⬡ WEB SOCKET TUNNEL ⬡</p>
+        <p class="footer">⬡ QUANTUM VLESS ⬡ TLS + WS + CLEAN IP ⬡</p>
     </div>
     
     <script>
-        // ============================================
-        // Matrix Lines Canvas
-        // ============================================
+        // Matrix Canvas
         const matrixCanvas = document.getElementById('matrixCanvas');
         const matrixCtx = matrixCanvas.getContext('2d');
         matrixCanvas.width = window.innerWidth;
@@ -384,9 +329,7 @@ async def index(request: Request):
         animateMatrix();
         window.addEventListener('resize',()=>{{matrixCanvas.width=window.innerWidth;matrixCanvas.height=window.innerHeight;}});
         
-        // ============================================
-        // Blackhole Canvas
-        // ============================================
+        // Blackhole
         const bhCanvas=document.getElementById('blackholeCanvas'),bhCtx=bhCanvas.getContext('2d'),cx=250,cy=175;
         function drawBlackhole(time){{
             bhCtx.clearRect(0,0,bhCanvas.width,bhCanvas.height);
@@ -408,24 +351,49 @@ async def index(request: Request):
         function animateBlackhole(time){{drawBlackhole(time);requestAnimationFrame(animateBlackhole);}}
         requestAnimationFrame(animateBlackhole);
         
-        // ============================================
-        // Load Configs
-        // ============================================
-        let slipnetConfig, clientCommand;
-        async function loadConfigs(){{
-            try{{
-                const r=await fetch('/api/config'),d=await r.json();
-                slipnetConfig=JSON.stringify(d.slipnet_config,null,2);
-                clientCommand=d.client_command;
-                document.getElementById('slipnet-config').textContent=slipnetConfig;
-                document.getElementById('client-command').textContent=clientCommand;
-            }}catch(e){{document.getElementById('slipnet-config').textContent='Error loading...';}}
-        }}
-        function copySlipNet(b){{if(slipnetConfig){{navigator.clipboard.writeText(slipnetConfig);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
-        function copyCommand(b){{if(clientCommand){{navigator.clipboard.writeText(clientCommand);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
-        function removeAuth(){{fetch('/api/remove-auth',{{method:'POST'}}).then(()=>location.reload());}}
+        // Config Generator
+        let currentLink = '', currentJSON = '';
         
-        loadConfigs();
+        async function generateConfig() {{
+            const address = document.getElementById('address').value || '104.26.0.1';
+            const sni = document.getElementById('sni').value || 'www.speedtest.net';
+            const host = document.getElementById('host').value || '{info["domain"]}';
+            const ws_path = document.getElementById('ws_path').value || '/ws';
+            
+            const params = new URLSearchParams({{address, sni, host, ws_path}});
+            const res = await fetch('/api/config?' + params);
+            const data = await res.json();
+            
+            currentLink = data.vless_link;
+            currentJSON = JSON.stringify(data.json_config, null, 2);
+            
+            document.getElementById('vless-link').textContent = currentLink;
+            document.getElementById('json-config').textContent = currentJSON;
+            
+            document.getElementById('result-box').style.display = 'block';
+            document.getElementById('json-box').style.display = 'block';
+        }}
+        
+        function copyLink() {{
+            if(currentLink) {{
+                navigator.clipboard.writeText(currentLink);
+                const btn = event.target;
+                btn.textContent = '✓ COPIED'; btn.classList.add('copied');
+                setTimeout(() => {{ btn.textContent = 'COPY'; btn.classList.remove('copied'); }}, 2000);
+            }}
+        }}
+        
+        function copyJSON() {{
+            if(currentJSON) {{
+                navigator.clipboard.writeText(currentJSON);
+                const btn = event.target;
+                btn.textContent = '✓ COPIED'; btn.classList.add('copied');
+                setTimeout(() => {{ btn.textContent = 'COPY'; btn.classList.remove('copied'); }}, 2000);
+            }}
+        }}
+        
+        // Generate on load
+        setTimeout(generateConfig, 500);
     </script>
 </body>
 </html>"""
