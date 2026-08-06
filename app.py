@@ -3,19 +3,18 @@ from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn, os, json, base64
 from pathlib import Path
 
-app = FastAPI(title="Quantum Panel v5")
+app = FastAPI(title="Quantum Panel v6")
 
 def load_info():
     try: return json.loads(Path("/app/data/info.json").read_text())
     except: return {
-        "uuid":"x","uuid_vmess":"x","trojan_pass":"x","ss_pass":"x","hysteria_pass":"quantum2024",
-        "domain":"localhost",
-        "vless":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/vless"},
-        "vmess":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/vmess"},
-        "trojan":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/trojan"},
-        "ss":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/ss"},
-        "hysteria":{"host":"tramway.proxy.rlwy.net","port":29499,"password":"quantum2024"},
-        "ssh":{"host":"sakura.proxy.rlwy.net","port":53742,"user":"root","pass":"quantum123"}
+        "uuid":"x","uuid_vmess":"x","trojan_pass":"x","domain":"localhost",
+        "server_public_key":"x","client_private_key":"x",
+        "vless":{"host":"metro","port":35093,"path":"/vless"},
+        "vmess":{"host":"metro","port":35093,"path":"/vmess"},
+        "trojan":{"host":"metro","port":35093,"path":"/trojan"},
+        "wireguard":{"host":"sakura","port":53742},
+        "ssh":{"host":"sakura","port":53742,"user":"root","pass":"quantum123"}
     }
 
 @app.get("/api/configs")
@@ -32,10 +31,23 @@ async def configs():
     }
     vmess_link = "vmess://" + base64.b64encode(json.dumps(vmess_config).encode()).decode()
     
+    # WireGuard Config
+    wg_config = f"""[Interface]
+PrivateKey = {i['client_private_key']}
+Address = 10.0.0.2/32
+DNS = 8.8.8.8
+
+[Peer]
+PublicKey = {i['server_public_key']}
+Endpoint = {i['wireguard']['host']}:{i['wireguard']['port']}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+"""
+    
     return JSONResponse({
         "vless": {
             "name":"VLESS + WS","icon":"🟣",
-            "link":f"vless://{i['uuid']}@{i['vless']['host']}:{i['vless']['port']}?encryption=none&security=none&type=ws&path={i['vless']['path']}&host={h}#Quantum-VLESS"
+            "link":f"vless://{i['uuid']}@{i['vless']['host']}:{i['vless']['port']}?encryption=none&security=none&type=ws&path={i['vless']['path']}&host={h}#Quantum"
         },
         "vmess": {
             "name":"VMess + WS","icon":"🟠",
@@ -43,21 +55,12 @@ async def configs():
         },
         "trojan": {
             "name":"Trojan + WS","icon":"🔴",
-            "link":f"trojan://{i['trojan_pass']}@{i['trojan']['host']}:{i['trojan']['port']}?security=none&type=ws&path={i['trojan']['path']}&host={h}#Quantum-Trojan"
+            "link":f"trojan://{i['trojan_pass']}@{i['trojan']['host']}:{i['trojan']['port']}?security=none&type=ws&path={i['trojan']['path']}&host={h}#Quantum"
         },
-        "ss": {
-            "name":"Shadowsocks","icon":"🟡",
-            "link":f"ss://{base64.b64encode(f'aes-256-gcm:{i["ss_pass"]}'.encode()).decode()}@{i['ss']['host']}:{i['ss']['port']}?path={i['ss']['path']}&host={h}#Quantum-SS"
-        },
-        "hysteria2": {
-            "name":"Hysteria2","icon":"🟤",
-            "config": json.dumps({
-                "server": f"{i['hysteria']['host']}:{i['hysteria']['port']}",
-                "auth": i['hysteria_pass'],
-                "sni": "quantum",
-                "tls": {"sni": "quantum", "insecure": True},
-                "bandwidth": {"up": "50 mbps", "down": "200 mbps"}
-            }, indent=2)
+        "wireguard": {
+            "name":"WireGuard","icon":"🟢",
+            "config": wg_config,
+            "note": "Need udp2raw client. See docs."
         },
         "ssh": {
             "name":"SSH Tunnel","icon":"🔵",
@@ -69,7 +72,7 @@ async def configs():
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return HTMLResponse("""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Quantum Panel v5</title>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Quantum v6</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:'Courier New',monospace;min-height:100vh;overflow-x:hidden}
@@ -96,16 +99,13 @@ canvas{position:fixed;top:0;left:0;z-index:0}
 .footer{text-align:center;margin-top:30px;color:#333;font-size:0.65em;letter-spacing:4px}
 .pulse{display:inline-block;width:8px;height:8px;background:#00ff41;border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin:0 5px}
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 10px #00ff41}50%{opacity:0.3;box-shadow:0 0 30px #00ff41}}
-@media(max-width:768px){.title{font-size:1.8em}.panel{padding:20px}}
 </style></head>
 <body><canvas id="c"></canvas>
 <div class="container"><div class="panel">
-<h1 class="title">QUANTUM v5</h1>
-<p class="subtitle"><span class="pulse"></span> 6 PROTOCOLS <span class="pulse"></span></p>
-<div class="tabs" id="tabs"></div>
-<div id="boxes"></div>
-<p class="footer">⬡ VLESS ⬡ VMess ⬡ Trojan ⬡ SS ⬡ Hysteria2 ⬡ SSH ⬡</p>
-</div></div>
+<h1 class="title">QUANTUM v6</h1>
+<p class="subtitle"><span class="pulse"></span> VLESS | VMess | Trojan | WireGuard | SSH <span class="pulse"></span></p>
+<div class="tabs" id="tabs"></div><div id="boxes"></div>
+<p class="footer">⬡ 5 PROTOCOLS ⬡</p></div></div>
 <script>
 const c=document.getElementById('c'),ctx=c.getContext('2d');c.width=window.innerWidth;c.height=window.innerHeight;
 const particles=[];
@@ -116,21 +116,17 @@ draw(ctx){const alpha=Math.sin(Math.PI*this.life/this.maxLife)*0.5;ctx.strokeSty
 for(let i=0;i<=this.len;i+=5){const t=i/this.len;const x1=this.x+Math.cos(this.angle)*i+Math.sin(this.angle+this.phase+t*8)*this.amplitude;const y1=this.y+Math.sin(this.angle)*i+Math.cos(this.angle+this.phase+t*8)*this.amplitude*0.5;
 if(i===0)ctx.moveTo(x1,y1);else ctx.lineTo(x1,y1);
 const x2=this.x+Math.cos(this.angle+Math.PI)*i+Math.sin(this.angle+Math.PI+this.phase+t*8)*this.amplitude;const y2=this.y+Math.sin(this.angle+Math.PI)*i+Math.cos(this.angle+Math.PI+this.phase+t*8)*this.amplitude*0.5;
-const dots=[[x1,y1],[x2,y2]];dots.forEach(([dx,dy])=>{if(Math.random()<0.15){ctx.fillStyle=`rgba(${this.color[0]},${this.color[1]},${this.color[2]},${alpha*2})`;ctx.beginPath();ctx.arc(dx,dy,2,0,Math.PI*2);ctx.fill()}})}
+ctx.stroke();dots.forEach(([dx,dy])=>{if(Math.random()<0.15){ctx.fillStyle=`rgba(${this.color[0]},${this.color[1]},${this.color[2]},${alpha*2})`;ctx.beginPath();ctx.arc(dx,dy,2,0,Math.PI*2);ctx.fill()}})}
 ctx.stroke();ctx.shadowBlur=0}}
 for(let i=0;i<30;i++)particles.push(new DNA());
 (function a(){ctx.fillStyle='rgba(0,0,0,0.06)';ctx.fillRect(0,0,c.width,c.height);particles.forEach(p=>{p.update();p.draw(ctx)});requestAnimationFrame(a)})();
-window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.innerHeight});
 let configs={};
 async function load(){const r=await fetch('/api/configs');configs=await r.json();
-const tc=document.getElementById('tabs'),bc=document.getElementById('boxes');tc.innerHTML='';bc.innerHTML='';
-let first=true;
+const tc=document.getElementById('tabs'),bc=document.getElementById('boxes');tc.innerHTML='';bc.innerHTML='';let first=true;
 for(const[k,v]of Object.entries(configs)){const t=document.createElement('div');t.className='tab'+(first?' active':'');t.innerHTML=`<span class="icon">${v.icon}</span><span class="name">${v.name}</span>`;t.onclick=(e)=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));e.target.closest('.tab').classList.add('active');document.querySelectorAll('.config-box').forEach(b=>b.classList.remove('active'));document.getElementById('box-'+k).classList.add('active')};tc.appendChild(t);
-const b=document.createElement('div');b.className='config-box'+(first?' active':'');b.id='box-'+k;
-let txt=v.link||v.command||v.config||'';
-b.innerHTML=`<div class="config-icon">${v.icon}</div><div class="config-name">${v.name}</div><div class="config-value"><button class="copy-btn" onclick="copy('${k}',this)">COPY</button>${txt}</div>`;
-bc.appendChild(b);first=false}}
-function copy(k,btn){if(configs[k]){let t=configs[k].link||configs[k].command||configs[k].config;navigator.clipboard.writeText(t);btn.textContent='✓ COPIED';btn.style.background='#00ff41';btn.style.color='#000';setTimeout(()=>{btn.textContent='COPY';btn.style.background='#6600cc';btn.style.color='#fff'},2000)}}
+const b=document.createElement('div');b.className='config-box'+(first?' active':'');b.id='box-'+k;let txt=v.link||v.config||v.command||'';
+b.innerHTML=`<div class="config-icon">${v.icon}</div><div class="config-name">${v.name}</div><div class="config-value"><button class="copy-btn" onclick="copy('${k}',this)">COPY</button>${txt}</div>`;bc.appendChild(b);first=false}}
+function copy(k,btn){if(configs[k]){let t=configs[k].link||configs[k].config||configs[k].command;navigator.clipboard.writeText(t);btn.textContent='✓';btn.style.background='#00ff41';btn.style.color='#000';setTimeout(()=>{btn.textContent='COPY';btn.style.background='#6600cc';btn.style.color='#fff'},2000)}}
 setTimeout(load,200);
 </script></body></html>""")
 
