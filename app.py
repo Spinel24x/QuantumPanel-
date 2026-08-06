@@ -19,7 +19,7 @@ def load_info():
             "domain": os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost"),
             "tcp_proxy_port": os.getenv("RAILWAY_TCP_PROXY_PORT", "8443"),
             "ws_path": "/ws",
-            "fingerprint": "chrome"
+            "security": "none"
         }
 
 # ============================================
@@ -34,8 +34,8 @@ async def get_config():
     port = info["tcp_proxy_port"]
     ws_path = info["ws_path"]
     
-    # لینک VLESS
-    vless_link = f"vless://{uuid}@{domain}:{port}?encryption=none&security=tls&sni={domain}&fp=chrome&type=ws&path={ws_path}&host={domain}#Quantum-VLESS"
+    # VLESS بدون TLS
+    vless_link = f"vless://{uuid}@{domain}:{port}?encryption=none&security=none&type=ws&path={ws_path}&host={domain}#Quantum-VLESS"
     
     # کانفیگ JSON
     json_config = {
@@ -54,12 +54,7 @@ async def get_config():
             },
             "streamSettings": {
                 "network": "ws",
-                "security": "tls",
-                "tlsSettings": {
-                    "serverName": domain,
-                    "fingerprint": "chrome",
-                    "allowInsecure": False
-                },
+                "security": "none",
                 "wsSettings": {
                     "path": ws_path,
                     "headers": {
@@ -71,7 +66,6 @@ async def get_config():
         }]
     }
     
-    # کانفیگ‌های برنامه‌ها
     configs = {
         "vless_link": vless_link,
         "json_config": json.dumps(json_config, indent=2),
@@ -82,17 +76,12 @@ async def get_config():
             "id": uuid,
             "encryption": "none",
             "network": "ws",
-            "security": "tls",
-            "sni": domain,
-            "fp": "chrome",
+            "security": "none",
             "path": ws_path,
             "host": domain,
             "type": "ws",
             "remark": "Quantum-VLESS"
         },
-        "v2rayng_link": vless_link,
-        "shadowrocket_link": vless_link,
-        "streisand_link": vless_link,
         "info": info
     }
     
@@ -317,7 +306,7 @@ async def index(request: Request):
         
         <div class="config-section">
             <h1 class="title">QUANTUM</h1>
-            <p class="subtitle"><span class="pulse-dot"></span> VLESS + TLS + WS + TCP PROXY <span class="pulse-dot"></span></p>
+            <p class="subtitle"><span class="pulse-dot"></span> VLESS + WS + TCP PROXY <span class="pulse-dot"></span></p>
             
             <div class="info-grid">
                 <div class="info-card">
@@ -333,19 +322,19 @@ async def index(request: Request):
                     <div class="value">VLESS</div>
                 </div>
                 <div class="info-card">
-                    <div class="label">Security</div>
-                    <div class="value">TLS + WS</div>
+                    <div class="label">Network</div>
+                    <div class="value">WS</div>
                 </div>
             </div>
             
             <div class="config-box">
-                <div class="config-label">🔗 VLESS Link</div>
+                <div class="config-label">🔗 VLESS Link (v2rayNG / Nekobox / Streisand)</div>
                 <button class="copy-btn" onclick="copyVLESS(this)">COPY</button>
                 <div class="config-value" id="vless-link">Loading...</div>
             </div>
             
             <div class="config-box">
-                <div class="config-label">📱 NapsternetV / v2rayNG</div>
+                <div class="config-label">📱 NapsternetV / JSON Config</div>
                 <button class="copy-btn" onclick="copyJSON(this)">COPY JSON</button>
                 <div class="config-value" id="json-config" style="max-height: 300px; overflow-y: auto;">Loading...</div>
             </div>
