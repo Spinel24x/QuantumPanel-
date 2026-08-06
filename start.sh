@@ -2,7 +2,7 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM + NGINX + TLS  🕳️     ║"
+echo "║   🕳️  QUANTUM + NGINX TLS  🕳️      ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=quantumpanel-production.up.railway.app
@@ -29,16 +29,16 @@ if [ ! -f /app/data/ss_pass.txt ]; then
 fi
 SS_PASS=$(cat /app/data/ss_pass.txt)
 
-echo "🔑 VLESS: $UUID"
+echo "🔑 UUID: $UUID"
 
-# SSL
+# SSL Certificate
 openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
   -keyout /app/certs/key.pem -out /app/certs/cert.pem \
   -subj "/CN=$DOMAIN" 2>/dev/null
 echo "✅ SSL Certificate"
 
 # ============================================
-# Xray
+# Xray روی 10000
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
@@ -65,15 +65,15 @@ XRAYEOF
 echo "✅ Xray on 127.0.0.1:10000"
 
 # ============================================
-# Nginx
+# Nginx روی 8443
 # ============================================
 cp /app/nginx.conf /etc/nginx/nginx.conf
+mkdir -p /var/log/nginx /var/lib/nginx
+nginx -t 2>/dev/null || true
 nginx -g "daemon off;" &
-echo "✅ Nginx on 0.0.0.0:8443 (TLS)"
+echo "✅ Nginx on 0.0.0.0:8443 (TLS→WS)"
 
-# ============================================
-# Save Info
-# ============================================
+# Save
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
@@ -90,7 +90,7 @@ EOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   4 PROTOCOLS + TLS + NGINX           ║"
+echo "║   ✅ NGINX:8443 → XRAY:10000          ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
