@@ -29,12 +29,10 @@ async def configs(address: str = "", sni: str = "", mode: str = "direct"):
     else:
         dest, port, security = i.get("tcp_host",""), i.get("tcp_port",35093), "none"
     
-    # VLESS
     vless = f"vless://{i['uuid']}@{dest}:{port}?encryption=none&security={security}"
     if security == "tls": vless += f"&sni={sni}&fp=chrome"
     vless += f"&type=ws&host={h}&path={paths.get('vless','/vless')}#Quantum"
     
-    # VMess
     vmess_config = {
         "v":"2","ps":"Quantum","add":dest,"port":port,"id":i["uuid_vmess"],"aid":0,
         "net":"ws","type":"none","host":h,"path":paths.get("vmess","/vmess"),
@@ -42,16 +40,13 @@ async def configs(address: str = "", sni: str = "", mode: str = "direct"):
     }
     vmess = "vmess://" + base64.b64encode(json.dumps(vmess_config).encode()).decode()
     
-    # Trojan
     trojan = f"trojan://{i['trojan_pass']}@{dest}:{port}?security={security}"
     if security == "tls": trojan += f"&sni={sni}"
     trojan += f"&type=ws&host={h}&path={paths.get('trojan','/trojan')}#Quantum"
     
-    # Shadowsocks
     ss_b64 = base64.b64encode(f"aes-256-gcm:{i['ss_pass']}".encode()).decode()
     ss = f"ss://{ss_b64}@{dest}:{port}?path={paths.get('ss','/ss')}&host={h}#Quantum"
     
-    # SSH
     ssh_cmd = f"ssh -D 1080 -p {i.get('ssh_port',53742)} -o ServerAliveInterval=30 root@{i.get('ssh_host','')}"
     
     return JSONResponse({
@@ -101,36 +96,31 @@ canvas{position:fixed;top:0;left:0;z-index:0}
 <body><canvas id="c"></canvas>
 <div class="container">
 <h1 class="title">QUANTUM v10</h1>
-<p class="subtitle">✦ MULTI-MODE PROTOCOL PANEL ✦</p>
+<p class="subtitle">MULTI-MODE PROTOCOL PANEL</p>
 <div class="mode-row">
-<div class="mode-btn active" onclick="setMode('direct',this)">🚀 Direct</div>
-<div class="mode-btn" onclick="setMode('tls',this)">🔒 TLS</div>
-<div class="mode-btn" onclick="setMode('cdn',this)">☁️ CDN</div>
+<div class="mode-btn active" onclick="setMode('direct',this)">Direct</div>
+<div class="mode-btn" onclick="setMode('tls',this)">TLS</div>
+<div class="mode-btn" onclick="setMode('cdn',this)">CDN</div>
 </div>
 <div class="input-row"><input id="addr" placeholder="Address (auto)"><input id="sni" value="www.speedtest.net" placeholder="SNI"></div>
-<button class="btn" onclick="gen()">⚡ GENERATE</button>
+<button class="btn" onclick="gen()">GENERATE</button>
 <div class="tabs" id="tabs"></div><div id="boxes"></div>
-<p class="footer">VLESS ✦ VMess ✦ Trojan ✦ SS ✦ SSH</p>
+<p class="footer">VLESS | VMess | Trojan | SS | SSH</p>
 </div>
 <script>
-const c=document.getElementById('c'),ctx=c.getContext('2d');c.width=window.innerWidth;c.height=window.innerHeight;
-const particles=[];
-class DNA{constructor(){this.reset()}
-reset(){this.x=Math.random()*c.width;this.y=Math.random()*c.height;this.len=Math.random()*150+50;this.angle=Math.random()*Math.PI*2;this.speed=Math.random()*0.5+0.2;this.amplitude=Math.random()*30+10;this.phase=Math.random()*Math.PI*2;this.color=[[102,0,204],[153,0,255],[0,204,255],[255,0,204],[0,255,204]][Math.floor(Math.random()*5)];this.life=0;this.maxLife=300+Math.random()*200}
-update(){this.life++;if(this.life>this.maxLife)this.reset();this.phase+=0.02}
-draw(ctx){var a=Math.sin(Math.PI*this.life/this.maxLife)*0.4;ctx.strokeStyle='rgba('+this.color[0]+','+this.color[1]+','+this.color[2]+','+a+')';ctx.lineWidth=1.2;ctx.beginPath();
-for(var i=0;i<=this.len;i+=5){var t=i/this.len;var x=this.x+Math.cos(this.angle)*i+Math.sin(this.angle+this.phase+t*8)*this.amplitude;var y=this.y+Math.sin(this.angle)*i+Math.cos(this.angle+this.phase+t*8)*this.amplitude*0.5;
-if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}
-ctx.stroke()}}
+var c=document.getElementById('c'),ctx=c.getContext('2d');c.width=window.innerWidth;c.height=window.innerHeight;
+var particles=[];
+function DNA(){this.reset()}
+DNA.prototype.reset=function(){this.x=Math.random()*c.width;this.y=Math.random()*c.height;this.len=Math.random()*150+50;this.angle=Math.random()*Math.PI*2;this.speed=Math.random()*0.5+0.2;this.amplitude=Math.random()*30+10;this.phase=Math.random()*Math.PI*2;this.color=[[102,0,204],[153,0,255],[0,204,255],[255,0,204],[0,255,204]][Math.floor(Math.random()*5)];this.life=0;this.maxLife=300+Math.random()*200};
+DNA.prototype.update=function(){this.life++;if(this.life>this.maxLife)this.reset();this.phase+=0.02};
+DNA.prototype.draw=function(ctx){var a=Math.sin(Math.PI*this.life/this.maxLife)*0.4;ctx.strokeStyle='rgba('+this.color[0]+','+this.color[1]+','+this.color[2]+','+a+')';ctx.lineWidth=1.2;ctx.beginPath();for(var i=0;i<=this.len;i+=5){var t=i/this.len;var x=this.x+Math.cos(this.angle)*i+Math.sin(this.angle+this.phase+t*8)*this.amplitude;var y=this.y+Math.sin(this.angle)*i+Math.cos(this.angle+this.phase+t*8)*this.amplitude*0.5;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}ctx.stroke()};
 for(var i=0;i<25;i++)particles.push(new DNA());
-(function a(){ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,c.width,c.height);particles.forEach(function(p){p.update();p.draw(ctx)});requestAnimationFrame(a)})();
+(function a(){ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,c.width,c.height);for(var i=0;i<particles.length;i++){particles[i].update();particles[i].draw(ctx)}requestAnimationFrame(a)})();
 
 var currentMode='direct',configs={};
-function setMode(m,el){currentMode=m;document.querySelectorAll('.mode-btn').forEach(function(b){b.classList.remove('active')});el.classList.add('active')}
-async function gen(){var a=document.getElementById('addr').value,s=document.getElementById('sni').value;var r=await fetch('/api/configs?address='+a+'&sni='+s+'&mode='+currentMode);configs=await r.json();render()}
-function render(){var tc=document.getElementById('tabs'),bc=document.getElementById('boxes');tc.innerHTML='';bc.innerHTML='';var first=true;
-for(var k in configs){if(k==='settings')continue;var v=configs[k];var t=document.createElement('div');t.className='tab'+(first?' active':'');t.innerHTML='<span class="icon">'+v.icon+'</span><span class="name">'+v.name+'</span>';t.onclick=(function(key){return function(){document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});document.querySelectorAll('.config-item').forEach(function(b){b.classList.remove('active')});this.classList.add('active');document.getElementById('item-'+key).classList.add('active')}})(k);tc.appendChild(t);
-var b=document.createElement('div');b.className='config-item'+(first?' active':'');b.id='item-'+k;var txt=v.link||v.command||'';b.innerHTML='<div class="config-icon">'+v.icon+'</div><div class="config-name">'+v.name+'</div><div class="config-value"><button class="copy-btn" onclick="var t=configs['"+k+"'].link||configs['"+k+"'].command;navigator.clipboard.writeText(t);this.textContent='✓';this.style.background='#0f0';var s=this;setTimeout(function(){s.textContent='COPY';s.style.background='#60c'},2000)">COPY</button>'+txt+'</div>';bc.appendChild(b);first=false}}
+function setMode(m,el){currentMode=m;var btns=document.querySelectorAll('.mode-btn');for(var i=0;i<btns.length;i++)btns[i].classList.remove('active');el.classList.add('active')}
+function gen(){var a=document.getElementById('addr').value;var s=document.getElementById('sni').value;fetch('/api/configs?address='+a+'&sni='+s+'&mode='+currentMode).then(function(r){return r.json()}).then(function(d){configs=d;render()})}
+function render(){var tc=document.getElementById('tabs'),bc=document.getElementById('boxes');tc.innerHTML='';bc.innerHTML='';var first=true;for(var k in configs){if(k==='settings')continue;var v=configs[k];var t=document.createElement('div');t.className='tab'+(first?' active':'');t.innerHTML='<span class="icon">'+v.icon+'</span><span class="name">'+v.name+'</span>';t.onclick=(function(key,el){return function(){var tabs=document.querySelectorAll('.tab');for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');var items=document.querySelectorAll('.config-item');for(var i=0;i<items.length;i++)items[i].classList.remove('active');el.classList.add('active');document.getElementById('item-'+key).classList.add('active')}})(k,t);tc.appendChild(t);var b=document.createElement('div');b.className='config-item'+(first?' active':'');b.id='item-'+k;var txt=v.link||v.command||'';b.innerHTML='<div class="config-icon">'+v.icon+'</div><div class="config-name">'+v.name+'</div><div class="config-value"><button class="copy-btn" onclick="var t=configs[\''+k+'\'].link||configs[\''+k+'\'].command;navigator.clipboard.writeText(t);this.textContent=\'OK\';this.style.background=\'#0f0\';var s=this;setTimeout(function(){s.textContent=\'COPY\';s.style.background=\'#60c\'},2000)">COPY</button>'+txt+'</div>';bc.appendChild(b);first=false}}
 setTimeout(gen,300);
 </script></body></html>""")
 
