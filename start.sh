@@ -3,7 +3,7 @@ set -e
 
 echo "╔════════════════════════════════════════╗"
 echo "║   🕳️  QUANTUM VLESS CORE  🕳️        ║"
-echo "║   VLESS + TLS + WS + TCP Proxy       ║"
+echo "║   VLESS + WS + TCP Proxy             ║"
 echo "╚════════════════════════════════════════╝"
 
 # ============================================
@@ -93,7 +93,8 @@ fi
 # استارت Nginx
 # ============================================
 echo "🚀 Starting Nginx..."
-nginx -t 2>/dev/null && nginx -g "daemon off;" > /var/log/nginx/nginx.log 2>&1 &
+nginx -t 2>/dev/null
+nginx -g "daemon off;" > /var/log/nginx/nginx.log 2>&1 &
 sleep 2
 
 if pgrep -f nginx > /dev/null; then
@@ -111,12 +112,10 @@ cat > /app/data/info.json << INFOEOF
     "domain": "$DOMAIN",
     "tcp_proxy_port": "$TCP_PROXY_PORT",
     "ws_path": "/ws",
-    "sni": "$DOMAIN",
     "protocol": "vless",
-    "security": "tls",
+    "security": "none",
     "type": "ws",
-    "network": "ws",
-    "fingerprint": "chrome"
+    "network": "ws"
 }
 INFOEOF
 
@@ -130,7 +129,7 @@ echo "║   WS Path:     /ws                    ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 echo "📱 VLESS Link:"
-echo "vless://$UUID@$DOMAIN:$TCP_PROXY_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&path=/ws&host=$DOMAIN#Quantum-VLESS"
+echo "vless://$UUID@$DOMAIN:$TCP_PROXY_PORT?encryption=none&security=none&type=ws&path=/ws&host=$DOMAIN#Quantum-VLESS"
 echo ""
 
 # ============================================
