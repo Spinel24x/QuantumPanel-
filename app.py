@@ -23,6 +23,11 @@ async def configs(address: str = "", sni: str = "", cf: str = "0"):
         sni=sni if sni else ""
     )
     
+    # اضافه کردن JSON config به خروجی برای Shadowsocks
+    for key in ["ss_ws", "ss_tcp"]:
+        if key in configs and "json" in configs[key]:
+            configs[key]["config"] = configs[key]["json"]
+    
     configs["settings"] = {
         "cf": use_cf,
         "clean_ips": ips.get("clean_ips", []),
@@ -119,7 +124,8 @@ function show(){
     var tc=document.createElement('div');
     tc.className='tab-content'+(first?' active':'');
     tc.id='content-'+k;
-    var txt=v.link||v.command||'';
+    var txt=v.link||'';
+    if(v.config) txt=v.config;
     tc.innerHTML='<h3>'+v.icon+' '+v.name+'</h3><div class="config-link"><button class="copy-btn" onclick="copyText(this)">COPY</button>'+txt+'</div>';
     configs.appendChild(tc);
     first=false;
