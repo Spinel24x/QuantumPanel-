@@ -77,7 +77,6 @@ h1{text-align:center;font-size:2.5em;background:linear-gradient(135deg,#60c,#0cf
 .inputs input{padding:10px;margin:5px;background:#111;border:1px solid #333;border-radius:15px;color:#0cf;text-align:center;font-family:'Courier New',monospace}
 #genBtn{display:block;width:100%;max-width:400px;margin:15px auto;padding:14px;background:#60c;color:#fff;border:none;border-radius:25px;font-size:1em;cursor:pointer;font-family:'Courier New',monospace;letter-spacing:3px}
 #genBtn:hover{background:#90f}
-.config{max-width:800px;margin:20px auto}
 .tab-row{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin:15px 0}
 .tab-btn{padding:10px 15px;background:#111;border:1px solid #333;border-radius:20px;color:#aaa;cursor:pointer;font-size:0.8em;font-family:'Courier New',monospace}
 .tab-btn.active{background:#60c;color:#fff;border-color:#60c}
@@ -90,73 +89,83 @@ h1{text-align:center;font-size:2.5em;background:linear-gradient(135deg,#60c,#0cf
 <body>
 <h1>QUANTUM</h1>
 <div class="modes">
-<button class="active" onclick="setMode('direct',this)">Direct</button>
-<button onclick="setMode('tls',this)">TLS</button>
-<button onclick="setMode('cdn',this)">CDN</button>
+<button id="modeDirect" class="active">Direct</button>
+<button id="modeTLS">TLS</button>
+<button id="modeCDN">CDN</button>
 </div>
 <div class="inputs">
 <input id="addr" placeholder="Address (auto)" style="width:250px">
 <input id="sni" value="www.speedtest.net" placeholder="SNI" style="width:200px">
 </div>
-<button id="genBtn" onclick="generate()">GENERATE</button>
+<button id="genBtn">GENERATE</button>
 <div class="tab-row" id="tabRow"></div>
 <div id="configs"></div>
 <script>
-var mode='direct',data={};
-function setMode(m,el){
-  mode=m;
-  document.querySelectorAll('.modes button').forEach(function(b){b.classList.remove('active')});
-  el.classList.add('active');
-}
-function generate(){
-  var a=document.getElementById('addr').value;
-  var s=document.getElementById('sni').value;
-  fetch('/api/configs?address='+a+'&sni='+s+'&mode='+mode)
-    .then(function(r){return r.json()})
-    .then(function(d){
-      data=d;
-      showConfigs();
-    });
-}
-function showConfigs(){
-  var tabRow=document.getElementById('tabRow');
-  var configs=document.getElementById('configs');
-  tabRow.innerHTML='';
-  configs.innerHTML='';
-  var first=true;
-  for(var k in data){
-    if(k==='settings')continue;
-    var v=data[k];
-    var tb=document.createElement('div');
-    tb.className='tab-btn'+(first?' active':'');
-    tb.textContent=v.name;
-    tb.onclick=(function(key,tbEl){
-      return function(){
-        document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active')});
-        document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active')});
-        tbEl.classList.add('active');
-        document.getElementById('content-'+key).classList.add('active');
-      };
-    })(k,tb);
-    tabRow.appendChild(tb);
-    var tc=document.createElement('div');
-    tc.className='tab-content'+(first?' active':'');
-    tc.id='content-'+k;
-    var txt=v.link||v.command||'';
-    tc.innerHTML='<h3>'+v.icon+' '+v.name+'</h3><div class="config-link"><button class="copy-btn" onclick="copyText(\''+k+'\',this)">COPY</button>'+txt+'</div>';
-    configs.appendChild(tc);
-    first=false;
+window.onload = function() {
+  var mode='direct',data={};
+  
+  document.getElementById('modeDirect').onclick = function(){ mode='direct'; setActive(this); };
+  document.getElementById('modeTLS').onclick = function(){ mode='tls'; setActive(this); };
+  document.getElementById('modeCDN').onclick = function(){ mode='cdn'; setActive(this); };
+  
+  function setActive(el) {
+    var btns = document.querySelectorAll('.modes button');
+    for (var i=0; i<btns.length; i++) btns[i].classList.remove('active');
+    el.classList.add('active');
   }
-}
-function copyText(k,btn){
-  var t=data[k].link||data[k].command;
-  navigator.clipboard.writeText(t);
-  btn.textContent='COPIED';
-  btn.style.background='#0f0';
-  btn.style.color='#000';
-  setTimeout(function(){btn.textContent='COPY';btn.style.background='#60c';btn.style.color='#fff'},2000);
-}
-setTimeout(generate,300);
+  
+  document.getElementById('genBtn').onclick = function() {
+    var a = document.getElementById('addr').value;
+    var s = document.getElementById('sni').value;
+    var url = '/api/configs?address=' + encodeURIComponent(a) + '&sni=' + encodeURIComponent(s) + '&mode=' + mode;
+    
+    fetch(url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        data = d;
+        showConfigs();
+      })
+      .catch(function(e){ console.log(e); });
+  };
+  
+  function showConfigs() {
+    var tabRow = document.getElementById('tabRow');
+    var configs = document.getElementById('configs');
+    tabRow.innerHTML = '';
+    configs.innerHTML = '';
+    var first = true;
+    
+    for (var k in data) {
+      if (k === 'settings') continue;
+      var v = data[k];
+      
+      var tb = document.createElement('div');
+      tb.className = 'tab-btn' + (first ? ' active' : '');
+      tb.textContent = v.name;
+      tb.setAttribute('data-key', k);
+      tb.onclick = function() {
+        var key = this.getAttribute('data-key');
+        var allTabs = document.querySelectorAll('.tab-btn');
+        var allContents = document.querySelectorAll('.tab-content');
+        for (var i=0; i<allTabs.length; i++) allTabs[i].classList.remove('active');
+        for (var i=0; i<allContents.length; i++) allContents[i].classList.remove('active');
+        this.classList.add('active');
+        document.getElementById('content-' + key).classList.add('active');
+      };
+      tabRow.appendChild(tb);
+      
+      var tc = document.createElement('div');
+      tc.className = 'tab-content' + (first ? ' active' : '');
+      tc.id = 'content-' + k;
+      var txt = v.link || v.command || '';
+      tc.innerHTML = '<h3>' + v.icon + ' ' + v.name + '</h3><div class="config-link"><button class="copy-btn" onclick="var t=this.parentElement.textContent.replace(\'COPY\',\'\').trim();navigator.clipboard.writeText(t);this.textContent=\'COPIED\';this.style.background=\'#0f0\';var s=this;setTimeout(function(){s.textContent=\'COPY\';s.style.background=\'#60c\'},2000)">COPY</button>' + txt + '</div>';
+      configs.appendChild(tc);
+      first = false;
+    }
+  }
+  
+  document.getElementById('genBtn').click();
+};
 </script></body></html>""")
 
 if __name__=="__main__":
