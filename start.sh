@@ -2,15 +2,23 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM CHISEL TUNNEL  🕳️     ║"
-echo "║   SOCKS5 + WS + TCP Proxy            ║"
+echo "║   🕳️  QUANTUM SLIPSTREAM  🕳️        ║"
+echo "║   TCP Tunnel + WS + TCP Proxy        ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
 TCP_PROXY_PORT=${RAILWAY_TCP_PROXY_PORT:-8443}
 PANEL_PORT=${PORT:-9000}
 
-mkdir -p /app/data
+mkdir -p /app/data /var/log
+
+# ============================================
+# تولید UUID
+# ============================================
+if [ ! -f /app/data/uuid.txt ]; then
+    cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
+fi
+UUID=$(cat /app/data/uuid.txt)
 
 # ============================================
 # خوندن user/pass
@@ -23,58 +31,62 @@ else
     PASSWORD=""
 fi
 
+echo "🔑 UUID: $UUID"
 echo "🌐 Domain: $DOMAIN"
 echo "🔌 TCP Proxy Port: $TCP_PROXY_PORT"
 [ -n "$USERNAME" ] && echo "🔐 Auth: $USERNAME" || echo "🔓 No Authentication"
 
 # ============================================
-# استارت Chisel Server
+# استارت SlipStream Server
 # ============================================
+echo "🚀 Starting SlipStream Server..."
+
 if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
-    echo "🚀 Starting Chisel with authentication..."
-    chisel server --port 8443 --socks5 --auth "${USERNAME}:${PASSWORD}" > /var/log/chisel.log 2>&1 &
+    slipstream server --port 8443 --socks5 127.0.0.1:1080 --auth "${USERNAME}:${PASSWORD}" > /var/log/slipstream.log 2>&1 &
 else
-    echo "🚀 Starting Chisel without authentication..."
-    chisel server --port 8443 --socks5 > /var/log/chisel.log 2>&1 &
+    slipstream server --port 8443 --socks5 127.0.0.1:1080 > /var/log/slipstream.log 2>&1 &
 fi
 
-sleep 2
+sleep 3
 
-CHISEL_OK=false
-if pgrep -f chisel > /dev/null; then
-    echo "   ✅ Chisel started (PID: $(pgrep -f chisel))"
-    CHISEL_OK=true
+SLIPSTREAM_OK=false
+if pgrep -f slipstream > /dev/null; then
+    echo "   ✅ SlipStream started (PID: $(pgrep -f slipstream))"
+    SLIPSTREAM_OK=true
 else
-    echo "   ❌ Chisel failed to start"
-    cat /var/log/chisel.log
+    echo "   ❌ SlipStream failed to start"
+    cat /var/log/slipstream.log
 fi
 
 # ============================================
-# ذخیره info (همه مقادیر یکسان)
+# ذخیره اطلاعات
 # ============================================
 cat > /app/data/info.json << INFOEOF
 {
+    "uuid": "$UUID",
     "domain": "$DOMAIN",
     "port": "$TCP_PROXY_PORT",
-    "ws_path": "/ws",
-    "protocol": "socks5",
-    "security": "ws",
-    "chisel_running": $CHISEL_OK,
+    "protocol": "slipstream",
+    "transport": "ws",
+    "slipstream_running": $SLIPSTREAM_OK,
     "username": "$USERNAME",
-    "password": "$PASSWORD"
+    "password": "$PASSWORD",
+    "server_port": 8443
 }
 INFOEOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   ✅ CHISEL TUNNEL IS READY           ║"
+echo "║   ✅ SLIPSTREAM IS READY              ║"
 echo "║   Port:    8443 (Internal)            ║"
 echo "║   Panel:   $PANEL_PORT                ║"
-echo "║   Status:  $CHISEL_OK                 ║"
+echo "║   Status:  $SLIPSTREAM_OK             ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
-echo "📱 SOCKS5 Address:"
-echo "   $DOMAIN:$TCP_PROXY_PORT"
+echo "📱 SlipNet Config:"
+echo "   Server: $DOMAIN"
+echo "   Port: $TCP_PROXY_PORT"
+echo "   UUID: $UUID"
 echo ""
 
 cd /app
