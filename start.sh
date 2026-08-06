@@ -48,12 +48,13 @@ else
 fi
 
 # ============================================
-# ذخیره info
+# ذخیره info (ws_path اضافه شد)
 # ============================================
 cat > /app/data/info.json << INFOEOF
 {
     "domain": "$DOMAIN",
     "port": "$TCP_PROXY_PORT",
+    "ws_path": "/ws",
     "protocol": "socks5",
     "security": "ws",
     "username": "$USERNAME",
@@ -73,4 +74,4 @@ echo "   $DOMAIN:$TCP_PROXY_PORT"
 echo ""
 
 cd /app
-exec python3 -m uvicorn app:app --host 0.0.0.0 --port 9000
+exec python3 -m uvicorn app:app --host 0.0.0.0 --port ${PANEL_PORT}
