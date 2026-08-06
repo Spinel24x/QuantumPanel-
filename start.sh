@@ -3,11 +3,11 @@ set -e
 
 echo "╔════════════════════════════════════════╗"
 echo "║   🕳️  QUANTUM VLESS + CDN  🕳️      ║"
-echo "║   VLESS + TLS + WS + Clean IP       ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
-PANEL_PORT=${PORT:-9000}
+PANEL_PORT=8000
+XRAY_PORT=9000
 
 mkdir -p /app/data /etc/xray /var/log/xray
 
@@ -21,13 +21,13 @@ echo "🔑 UUID: $UUID"
 echo "🌐 Domain: $DOMAIN"
 
 # ============================================
-# Xray Config - VLESS + WS (بدون TLS - CDN هندل می‌کنه)
+# Xray روی پورت 9000
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
     "inbounds": [{
-        "port": 8080,
+        "port": 9000,
         "listen": "0.0.0.0",
         "protocol": "vless",
         "settings": {
@@ -57,7 +57,7 @@ echo "✅ Xray config created"
 sleep 2
 
 if pgrep -f xray > /dev/null; then
-    echo "   ✅ Xray started (PID: $(pgrep -f xray))"
+    echo "   ✅ Xray started on port 9000"
     XRAY_OK=true
 else
     echo "   ❌ Xray failed"
@@ -71,24 +71,17 @@ cat > /app/data/info.json << INFOEOF
     "domain": "$DOMAIN",
     "ws_path": "/ws",
     "xray_running": $XRAY_OK,
-    "default_clean_ips": [
-        "104.26.0.1",
-        "104.26.1.1",
-        "172.67.70.1",
-        "1.1.1.1",
-        "speed.cloudflare.com"
-    ],
+    "default_clean_ips": ["104.26.0.1", "1.1.1.1", "speed.cloudflare.com"],
     "default_sni": "www.speedtest.net"
 }
 INFOEOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   ✅ QUANTUM VLESS IS READY           ║"
-echo "║   Panel:  $PANEL_PORT                 ║"
-echo "║   Xray:   8080                        ║"
+echo "║   ✅ READY - Panel:8000 Xray:9000     ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
+# پنل روی 8000
 cd /app
-exec python3 -m uvicorn app:app --host 0.0.0.0 --port ${PANEL_PORT}
+exec python3 -m uvicorn app:app --host 0.0.0.0 --port 8000
