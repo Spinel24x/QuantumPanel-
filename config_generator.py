@@ -1,11 +1,24 @@
 import json, base64
 
 def load_info():
-    with open("/app/info.json") as f:
-        return json.load(f)
+    # اول از data/info.json (UUID ها و پسوردها)
+    try:
+        with open("/app/data/info.json") as f:
+            data_info = json.load(f)
+    except:
+        data_info = {}
+    
+    # بعد از info.json (تنظیمات پایه)
+    try:
+        with open("/app/info.json") as f:
+            base_info = json.load(f)
+    except:
+        base_info = {}
+    
+    # ترکیب هر دو
+    return {**base_info, **data_info}
 
 def load_ips():
-    """IPS.json اختیاری - اگه نباشه لیست خالی برمی‌گرده"""
     try:
         with open("/app/ips.json") as f:
             return json.load(f)
@@ -13,28 +26,25 @@ def load_ips():
         return {"clean_ips": [], "default_sni": ""}
 
 def build_connection(use_cf=False, clean_ip="", sni=""):
-    """تصمیم‌گیری هوشمند برای Address, Host, SNI, Port, Security"""
     info = load_info()
     ips = load_ips()
     
-    railway = info["railway_domain"]
+    railway = info.get("railway_domain", "localhost")
     worker = info.get("worker_domain", railway)
     
     if use_cf:
-        # Cloudflare فعال
         if clean_ip:
             address = clean_ip
         elif ips.get("clean_ips"):
-            address = ips["clean_ips"][0]  # اولین IP تمیز از لیست
+            address = ips["clean_ips"][0]
         else:
-            address = worker  # fallback به Worker domain
+            address = worker
         
         host = railway
         sni_value = sni if sni else (ips.get("default_sni") or worker)
         port = 443
         security = "tls"
     else:
-        # مستقیم (بدون Cloudflare)
         address = info.get("tcp_host", railway)
         host = railway
         sni_value = sni if sni else ""
@@ -81,7 +91,6 @@ def generate_ss(password, conn):
     return f"ss://{ss_b64}@{conn['address']}:{conn['port']}?path=/ss&host={conn['host']}#Quantum"
 
 def generate_all(uuid, uuid_vmess, trojan_pass, ss_pass, use_cf=False, clean_ip="", sni=""):
-    """تولید همه کانفیگ‌ها با یک تابع"""
     conn = build_connection(use_cf, clean_ip, sni)
     
     return {
