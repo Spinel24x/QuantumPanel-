@@ -5,7 +5,7 @@ import os
 import json
 from pathlib import Path
 
-app = FastAPI(title="Quantum Panel Pro")
+app = FastAPI(title="Quantum Multi-Protocol Panel")
 
 def load_info():
     try:
@@ -14,91 +14,79 @@ def load_info():
         return {
             "uuid": "00000000-0000-0000-0000-000000000000",
             "domain": os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost"),
-            "port": "35093",
+            "ssh_port": "2222",
+            "ssh_user": "root",
+            "ssh_pass": "quantum123",
+            "vless_port": "8443",
+            "chisel_port": "8888",
             "ws_path": "/ws",
-            "xray_running": False,
-            "tcp_proxy_host": "metro.proxy.rlwy.net",
-            "tcp_proxy_port": "35093"
+            "all_running": False
         }
 
 @app.get("/api/configs")
-async def get_all_configs(address: str = "", port: str = "", sni: str = ""):
+async def get_configs(address: str = "", port: str = ""):
     info = load_info()
     uuid = info.get("uuid", "")
     host = info.get("domain", "localhost")
     ws_path = info.get("ws_path", "/ws")
-    tcp_host = info.get("tcp_proxy_host", "metro.proxy.rlwy.net")
-    tcp_port = info.get("tcp_proxy_port", "35093")
     
     if not address:
-        address = tcp_host
+        address = host
     if not port:
-        port = tcp_port
-    if not sni:
-        sni = "www.speedtest.net"
+        port = "35093"
     
     configs = {
-        # ۱. VLESS + WS + TCP Proxy (بدون TLS)
-        "vless_ws_direct": {
-            "name": "VLESS + WS (Direct TCP Proxy)",
+        "vless_ws": {
+            "name": "VLESS + WebSocket",
+            "icon": "🟣",
             "protocol": "vless",
-            "link": f"vless://{uuid}@{tcp_host}:{tcp_port}?encryption=none&security=none&type=ws&path={ws_path}&host={host}#Quantum-Direct",
+            "link": f"vless://{uuid}@{address}:{port}?encryption=none&security=none&type=ws&path={ws_path}&host={host}#Quantum-VLESS",
             "config": {
-                "address": tcp_host,
-                "port": int(tcp_port),
-                "uuid": uuid,
-                "network": "ws",
-                "security": "none",
-                "path": ws_path,
-                "host": host
-            }
-        },
-        # ۲. VLESS + WS + Custom Address
-        "vless_ws_custom": {
-            "name": "VLESS + WS (Custom Address)",
-            "protocol": "vless",
-            "link": f"vless://{uuid}@{address}:{port}?encryption=none&security=none&type=ws&path={ws_path}&host={host}#Quantum-Custom",
-            "config": {
+                "type": "vless",
                 "address": address,
                 "port": int(port),
                 "uuid": uuid,
+                "encryption": "none",
                 "network": "ws",
                 "security": "none",
                 "path": ws_path,
                 "host": host
-            }
-        },
-        # ۳. VLESS + TLS + WS (Worker/CDN)
-        "vless_tls_ws": {
-            "name": "VLESS + TLS + WS (CDN/Worker)",
-            "protocol": "vless",
-            "link": f"vless://{uuid}@{address}:443?encryption=none&security=tls&sni={sni}&fp=chrome&type=ws&path={ws_path}&host={host}#Quantum-TLS",
-            "config": {
+            },
+            "v2rayng": {
                 "address": address,
-                "port": 443,
-                "uuid": uuid,
+                "port": int(port),
+                "id": uuid,
                 "network": "ws",
-                "security": "tls",
-                "sni": sni,
-                "fingerprint": "chrome",
                 "path": ws_path,
                 "host": host
             }
         },
-        # ۴. VMess + WS
-        "vmess_ws": {
-            "name": "VMess + WS",
-            "protocol": "vmess",
-            "link": f"vmess://{uuid}@{tcp_host}:{tcp_port}?encryption=none&security=none&type=ws&path={ws_path}&host={host}#Quantum-VMess",
+        "socks5_chisel": {
+            "name": "SOCKS5 (Chisel Tunnel)",
+            "icon": "🟢",
+            "protocol": "socks5",
+            "link": f"socks5://{address}:{port}#Quantum-Chisel",
             "config": {
-                "address": tcp_host,
-                "port": int(tcp_port),
-                "uuid": uuid,
-                "network": "ws",
-                "security": "none",
-                "path": ws_path,
-                "host": host
-            }
+                "type": "socks5",
+                "address": address,
+                "port": int(port),
+                "note": "Use with Chisel Client or direct SOCKS5"
+            },
+            "chisel_command": f"chisel client {address}:{port} 1080:socks"
+        },
+        "ssh_tunnel": {
+            "name": "SSH Tunnel",
+            "icon": "🔵",
+            "protocol": "ssh",
+            "link": f"ssh://{info.get('ssh_user','root')}:{info.get('ssh_pass','quantum123')}@{address}:{port}#Quantum-SSH",
+            "config": {
+                "type": "ssh",
+                "address": address,
+                "port": int(port),
+                "username": info.get("ssh_user", "root"),
+                "password": info.get("ssh_pass", "quantum123")
+            },
+            "command": f"ssh -D 1080 -p {port} {info.get('ssh_user','root')}@{address}"
         }
     }
     
@@ -119,31 +107,33 @@ async def index(request: Request):
         body{{background:#000;color:#fff;font-family:'Courier New',monospace;min-height:100vh;padding:20px}}
         canvas{{position:fixed;top:0;left:0;z-index:0}}
         .container{{position:relative;z-index:2;max-width:800px;margin:0 auto}}
-        .panel{{background:rgba(5,5,20,0.9);border:1px solid rgba(102,0,204,0.3);border-radius:20px;padding:30px;margin-bottom:20px;box-shadow:0 0 60px rgba(102,0,204,0.2);backdrop-filter:blur(20px)}}
-        .title{{font-size:2.5em;text-align:center;background:linear-gradient(135deg,#6600cc,#00ccff,#ff00cc,#6600cc);background-size:300% 300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gradientShift 4s ease infinite;margin-bottom:10px;letter-spacing:6px}}
+        .header{{text-align:center;margin-bottom:20px}}
+        .title{{font-size:2.5em;background:linear-gradient(135deg,#6600cc,#00ccff,#ff00cc,#6600cc);background-size:300% 300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gradientShift 4s ease infinite;letter-spacing:6px}}
         @keyframes gradientShift{{0%{{background-position:0% 50%}}50%{{background-position:100% 50%}}100%{{background-position:0% 50%}}}}
-        .subtitle{{text-align:center;color:#6600cc;margin-bottom:20px;font-size:0.8em}}
+        .panel{{background:rgba(5,5,20,0.9);border:1px solid rgba(102,0,204,0.3);border-radius:20px;padding:30px;margin-bottom:20px;box-shadow:0 0 60px rgba(102,0,204,0.2);backdrop-filter:blur(20px)}}
         .form-row{{display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap}}
         .form-group{{flex:1;min-width:150px}}
         .form-group label{{display:block;color:#6600cc;font-size:0.7em;margin-bottom:5px;text-transform:uppercase;letter-spacing:2px}}
         .form-group input{{width:100%;padding:12px;background:rgba(0,0,0,0.6);border:1px solid rgba(102,0,204,0.3);border-radius:8px;color:#00ccff;font-family:'Courier New',monospace;font-size:0.9em}}
         .form-group input:focus{{outline:none;border-color:#6600cc;box-shadow:0 0 15px rgba(102,0,204,0.3)}}
-        .btn{{background:#6600cc;color:white;border:none;padding:12px 24px;border-radius:20px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.85em;width:100%;margin-top:10px;transition:all 0.3s}}
-        .btn:hover{{background:#9900ff;box-shadow:0 0 20px rgba(102,0,204,0.5)}}
-        .tabs{{display:flex;gap:5px;margin-bottom:20px;flex-wrap:wrap}}
-        .tab{{background:rgba(102,0,204,0.2);color:#aaa;border:1px solid rgba(102,0,204,0.3);padding:10px 15px;border-radius:10px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.75em;transition:all 0.3s}}
-        .tab.active{{background:#6600cc;color:white;border-color:#6600cc}}
-        .tab:hover{{background:rgba(102,0,204,0.4)}}
-        .config-box{{background:rgba(0,0,0,0.7);border:1px solid rgba(102,0,204,0.2);border-radius:12px;padding:20px;margin-top:15px;position:relative;display:none}}
+        .btn{{background:#6600cc;color:white;border:none;padding:14px;border-radius:15px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.9em;width:100%;transition:all 0.3s}}
+        .btn:hover{{background:#9900ff;box-shadow:0 0 25px rgba(102,0,204,0.5)}}
+        .tabs{{display:flex;gap:8px;margin:20px 0;flex-wrap:wrap}}
+        .tab{{flex:1;min-width:120px;padding:15px;background:rgba(102,0,204,0.2);border:1px solid rgba(102,0,204,0.3);border-radius:15px;text-align:center;cursor:pointer;transition:all 0.3s;color:#aaa}}
+        .tab.active{{background:#6600cc;color:white;border-color:#6600cc;box-shadow:0 0 20px rgba(102,0,204,0.4)}}
+        .tab:hover:not(.active){{background:rgba(102,0,204,0.4)}}
+        .tab .icon{{font-size:1.5em;display:block;margin-bottom:5px}}
+        .tab .name{{font-size:0.7em;letter-spacing:1px}}
+        .config-box{{background:rgba(0,0,0,0.7);border:1px solid rgba(102,0,204,0.2);border-radius:12px;padding:20px;position:relative;display:none}}
         .config-box.active{{display:block}}
         .config-label{{color:#6600cc;font-size:0.8em;margin-bottom:10px;text-transform:uppercase;letter-spacing:2px}}
-        .config-value{{color:#00ff41;font-size:0.75em;word-break:break-all;line-height:1.8;max-height:300px;overflow-y:auto}}
-        .copy-btn{{position:absolute;top:10px;right:10px;background:#6600cc;color:white;border:none;padding:8px 15px;border-radius:15px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.7em}}
+        .config-value{{color:#00ff41;font-size:0.75em;word-break:break-all;line-height:1.8;max-height:200px;overflow-y:auto;background:rgba(0,0,0,0.5);padding:15px;border-radius:8px;white-space:pre-wrap}}
+        .copy-btn{{position:absolute;top:15px;right:15px;background:#6600cc;color:white;border:none;padding:8px 15px;border-radius:10px;cursor:pointer;font-size:0.7em;transition:all 0.3s}}
         .copy-btn:hover{{background:#9900ff}}
-        .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:20px}}
-        .info-card{{background:rgba(0,0,0,0.6);border:1px solid rgba(102,0,204,0.2);border-radius:10px;padding:12px;text-align:center}}
-        .info-card .label{{color:#666;font-size:0.6em;text-transform:uppercase;letter-spacing:1px}}
-        .info-card .value{{color:#00ccff;font-weight:bold;font-size:0.8em;margin-top:3px;word-break:break-all}}
+        .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:15px}}
+        .info-card{{background:rgba(0,0,0,0.6);border:1px solid rgba(102,0,204,0.2);border-radius:10px;padding:10px;text-align:center}}
+        .info-card .label{{color:#666;font-size:0.6em;text-transform:uppercase}}
+        .info-card .value{{color:#00ccff;font-size:0.75em;margin-top:3px;word-break:break-all}}
     </style>
 </head>
 <body>
@@ -151,25 +141,28 @@ async def index(request: Request):
     
     <div class="container">
         <div class="panel">
-            <h1 class="title">QUANTUM PRO</h1>
-            <p class="subtitle">⚡ Multi-Protocol VPN Panel ⚡</p>
+            <div class="header">
+                <h1 class="title">QUANTUM PRO</h1>
+                <p style="color:#6600cc;margin-top:5px;font-size:0.8em">Multi-Protocol VPN Panel</p>
+            </div>
             
             <div class="info-grid">
                 <div class="info-card"><div class="label">UUID</div><div class="value">{info.get('uuid','')[:16]}...</div></div>
-                <div class="info-card"><div class="label">Host</div><div class="value">{info.get('domain','')}</div></div>
-                <div class="info-card"><div class="label">TCP Proxy</div><div class="value">{info.get('tcp_proxy_port','')}</div></div>
-                <div class="info-card"><div class="label">Xray</div><div class="value">{'🟢' if info.get('xray_running') else '🔴'}</div></div>
+                <div class="info-card"><div class="label">Domain</div><div class="value">{info.get('domain','')[:20]}...</div></div>
+                <div class="info-card"><div class="label">VLESS</div><div class="value">{info.get('vless_port','8443')}</div></div>
+                <div class="info-card"><div class="label">SSH</div><div class="value">{info.get('ssh_port','2222')}</div></div>
+                <div class="info-card"><div class="label">Chisel</div><div class="value">{info.get('chisel_port','8888')}</div></div>
+                <div class="info-card"><div class="label">Status</div><div class="value" style="color:{'#00ff41' if info.get('all_running') else '#ff0040'}">{'🟢 ON' if info.get('all_running') else '🔴 OFF'}</div></div>
             </div>
             
             <div class="form-row">
                 <div class="form-group"><label>Address</label><input type="text" id="address" value="metro.proxy.rlwy.net"></div>
                 <div class="form-group"><label>Port</label><input type="text" id="port" value="35093"></div>
-                <div class="form-group"><label>SNI</label><input type="text" id="sni" value="www.speedtest.net"></div>
             </div>
             
-            <button class="btn" onclick="generateAll()">🚀 Generate All Configs</button>
+            <button class="btn" onclick="generateAll()">🚀 Generate All Configurations</button>
             
-            <div class="tabs" id="tabs"></div>
+            <div class="tabs" id="tabs-container"></div>
             <div id="configs-container"></div>
         </div>
     </div>
@@ -189,20 +182,18 @@ async def index(request: Request):
         animateMatrix();
         window.addEventListener('resize',()=>{{matrixCanvas.width=window.innerWidth;matrixCanvas.height=window.innerHeight;}});
         
-        let allConfigs={{}};
-        let activeTab='';
+        let allConfigs={{}},activeTab='';
         
         async function generateAll(){{
-            const a=document.getElementById('address').value;
-            const p=document.getElementById('port').value;
-            const s=document.getElementById('sni').value;
-            const r=await fetch(`/api/configs?address=${{a}}&port=${{p}}&sni=${{s}}`);
+            const a=document.getElementById('address').value||'metro.proxy.rlwy.net';
+            const p=document.getElementById('port').value||'35093';
+            const r=await fetch(`/api/configs?address=${{a}}&port=${{p}}`);
             allConfigs=await r.json();
             renderTabs();
         }}
         
         function renderTabs(){{
-            const tabsDiv=document.getElementById('tabs');
+            const tabsDiv=document.getElementById('tabs-container');
             const configsDiv=document.getElementById('configs-container');
             tabsDiv.innerHTML='';
             configsDiv.innerHTML='';
@@ -211,32 +202,39 @@ async def index(request: Request):
             for(const[key,cfg] of Object.entries(allConfigs)){{
                 const tab=document.createElement('div');
                 tab.className='tab'+(first?' active':'');
-                tab.textContent=cfg.name;
-                tab.onclick=()=>switchTab(key);
+                tab.onclick=(e)=>switchTab(key,e);
+                tab.innerHTML=`<span class="icon">${{cfg.icon}}</span><span class="name">${{cfg.name}}</span>`;
                 tabsDiv.appendChild(tab);
                 
                 const box=document.createElement('div');
                 box.className='config-box'+(first?' active':'');
                 box.id='box-'+key;
-                box.innerHTML=`<div class="config-label">${{cfg.name}}</div><button class="copy-btn" onclick="copyConfig('${{key}}',this)">COPY</button><div class="config-value">${{cfg.link}}</div>`;
+                let displayText=cfg.link;
+                if(cfg.command)displayText=cfg.command;
+                if(cfg.chisel_command)displayText=cfg.chisel_command;
+                box.innerHTML=`<div class="config-label">${{cfg.icon}} ${{cfg.name}}</div><button class="copy-btn" onclick="copyConfig('${{key}}',this)">COPY</button><div class="config-value">${{displayText}}</div>`;
                 configsDiv.appendChild(box);
                 
                 first=false;
             }}
         }}
         
-        function switchTab(key){{
+        function switchTab(key,e){{
             document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
             document.querySelectorAll('.config-box').forEach(b=>b.classList.remove('active'));
-            event.target.classList.add('active');
+            e.target.closest('.tab').classList.add('active');
             document.getElementById('box-'+key).classList.add('active');
         }}
         
         function copyConfig(key,btn){{
             if(allConfigs[key]){{
-                navigator.clipboard.writeText(allConfigs[key].link);
+                let text=allConfigs[key].link;
+                if(allConfigs[key].command)text=allConfigs[key].command;
+                if(allConfigs[key].chisel_command)text=allConfigs[key].chisel_command;
+                navigator.clipboard.writeText(text);
                 btn.textContent='✓ COPIED';
-                setTimeout(()=>btn.textContent='COPY',2000);
+                btn.style.background='#00ff41';btn.style.color='#000';
+                setTimeout(()=>{{btn.textContent='COPY';btn.style.background='#6600cc';btn.style.color='#fff';}},2000);
             }}
         }}
         
