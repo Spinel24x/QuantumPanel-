@@ -5,7 +5,7 @@ import os
 import json
 from pathlib import Path
 
-app = FastAPI(title="Quantum GOST Panel")
+app = FastAPI(title="Quantum Chisel Panel")
 
 # ============================================
 # Helper
@@ -18,8 +18,10 @@ def load_info():
             "domain": os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost"),
             "port": os.getenv("RAILWAY_TCP_PROXY_PORT", "8443"),
             "ws_path": "/ws",
+            "security": "ws",
             "username": "",
-            "password": ""
+            "password": "",
+            "chisel_running": False
         }
 
 def load_users():
@@ -39,33 +41,46 @@ def save_users(username, password):
 async def get_config():
     info = load_info()
     
-    socks5_config = {
-        "protocol": "socks5",
-        "address": info["domain"],
-        "port": int(info["port"]),
-        "path": info["ws_path"],
-        "security": "wss",
-        "username": info.get("username", ""),
-        "password": info.get("password", "")
-    }
+    domain = info.get("domain", "localhost")
+    port = info.get("port", "8443")
+    username = info.get("username", "")
+    password = info.get("password", "")
+    chisel_running = info.get("chisel_running", False)
+    security = info.get("security", "ws")
     
     # لینک SOCKS5
-    if info.get("username") and info.get("password"):
-        socks5_link = f"socks5://{info['username']}:{info['password']}@{info['domain']}:{info['port']}?security=wss&path={info['ws_path']}#Quantum-GOST"
+    if username and password:
+        socks5_link = f"socks5://{username}:{password}@{domain}:{port}#Quantum-Chisel"
     else:
-        socks5_link = f"socks5://{info['domain']}:{info['port']}?security=wss&path={info['ws_path']}#Quantum-GOST"
+        socks5_link = f"socks5://{domain}:{port}#Quantum-Chisel"
+    
+    # کانفیگ JSON
+    socks5_config = {
+        "protocol": "socks5",
+        "address": domain,
+        "port": int(port),
+        "security": security,
+        "username": username if username else None,
+        "password": password if password else None,
+        "chisel_running": chisel_running,
+        "note": "Requires Chisel Client on your device"
+    }
     
     return JSONResponse({
         "socks5_link": socks5_link,
         "config": socks5_config,
-        "info": info
+        "status": {
+            "chisel_running": chisel_running,
+            "domain": domain,
+            "port": port,
+            "security": security
+        }
     })
 
 @app.post("/api/set-auth")
 async def set_auth(username: str = Form(...), password: str = Form(...)):
     save_users(username, password)
     
-    # آپدیت info
     info = load_info()
     info["username"] = username
     info["password"] = password
@@ -92,14 +107,15 @@ async def index(request: Request):
     info = load_info()
     users = load_users()
     
-    auth_status = "🔐 Authentication Enabled" if info.get("username") else "🔓 No Authentication"
+    chisel_status = "🟢 Running" if info.get("chisel_running") else "🔴 Stopped"
+    auth_status = "🔐 Enabled" if info.get("username") else "🔓 None"
     
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quantum GOST Panel</title>
+    <title>Quantum Chisel Panel</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         
@@ -180,7 +196,7 @@ async def index(request: Request):
         }}
         
         .info-card .value {{
-            color: #00ccff; font-weight: bold; font-size: 0.9em; word-break: break-all;
+            font-weight: bold; font-size: 0.9em; word-break: break-all;
         }}
         
         .config-box {{
@@ -270,29 +286,37 @@ async def index(request: Request):
         
         <div class="panel-section">
             <h1 class="title">QUANTUM</h1>
-            <p class="subtitle"><span class="pulse-dot"></span> GOST SOCKS5 TUNNEL <span class="pulse-dot"></span></p>
+            <p class="subtitle"><span class="pulse-dot"></span> CHISEL SOCKS5 TUNNEL <span class="pulse-dot"></span></p>
             
             <div class="info-grid">
                 <div class="info-card">
                     <div class="label">Domain</div>
-                    <div class="value">{info['domain']}</div>
+                    <div class="value" style="color:#00ccff;">{info['domain']}</div>
                 </div>
                 <div class="info-card">
                     <div class="label">Port</div>
-                    <div class="value">{info['port']}</div>
+                    <div class="value" style="color:#00ccff;">{info['port']}</div>
                 </div>
                 <div class="info-card">
                     <div class="label">Protocol</div>
-                    <div class="value">SOCKS5</div>
+                    <div class="value" style="color:#00ccff;">SOCKS5</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Security</div>
+                    <div class="value" style="color:#00ccff;">WS</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Chisel</div>
+                    <div class="value" id="chisel-status" style="color:{'#00ff41' if info.get('chisel_running') else '#ff0040'};">{chisel_status}</div>
                 </div>
                 <div class="info-card">
                     <div class="label">Auth</div>
-                    <div class="value">{auth_status}</div>
+                    <div class="value" style="color:#00ccff;">{auth_status}</div>
                 </div>
             </div>
             
             <div class="config-box">
-                <div class="config-label">📱 SOCKS5 Configuration</div>
+                <div class="config-label">📱 SOCKS5 Configuration (v2rayNG / Custom)</div>
                 <button class="copy-btn" onclick="copyConfig(this)">COPY</button>
                 <div class="config-value" id="socks5-config">Loading...</div>
             </div>
@@ -315,10 +339,10 @@ async def index(request: Request):
                     <button type="button" class="btn btn-danger" onclick="removeAuth()">🗑️ Remove Auth</button>
                 </div>
             </form>
-            <p style="color:#666; font-size:0.7em; margin-top:10px;">⚠️ Changing auth requires server restart (auto-redeploy).</p>
+            <p style="color:#666; font-size:0.7em; margin-top:10px;">⚠️ Changing auth requires server restart.</p>
         </div>
         
-        <p class="footer">⬡ QUANTUM GOST ⬡ SOCKS5 + WSS ⬡</p>
+        <p class="footer">⬡ QUANTUM CHISEL ⬡ SOCKS5 + WS ⬡</p>
     </div>
     
     <script>
@@ -383,7 +407,9 @@ async def index(request: Request):
         function animateBlackhole(time){{drawBlackhole(time);requestAnimationFrame(animateBlackhole);}}
         requestAnimationFrame(animateBlackhole);
         
+        // ============================================
         // Load configs
+        // ============================================
         let socks5Config, socks5Link;
         async function loadConfigs(){{
             try{{
@@ -392,7 +418,9 @@ async def index(request: Request):
                 socks5Link=d.socks5_link;
                 document.getElementById('socks5-config').textContent=socks5Config;
                 document.getElementById('socks5-link').textContent=socks5Link;
-            }}catch(e){{}}
+                document.getElementById('chisel-status').textContent=d.status.chisel_running ? '🟢 Running' : '🔴 Stopped';
+                document.getElementById('chisel-status').style.color=d.status.chisel_running ? '#00ff41' : '#ff0040';
+            }}catch(e){{document.getElementById('socks5-config').textContent='Error loading...';}}
         }}
         function copyConfig(b){{if(socks5Config){{navigator.clipboard.writeText(socks5Config);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
         function copyLink(b){{if(socks5Link){{navigator.clipboard.writeText(socks5Link);b.textContent='✓ COPIED';b.classList.add('copied');setTimeout(()=>{{b.textContent='COPY';b.classList.remove('copied');}},2000);}}}}
