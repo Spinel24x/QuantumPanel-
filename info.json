@@ -1,6 +1,6 @@
 {
     "railway_domain": "quantumpanel-production.up.railway.app",
-    "worker_domain": "quantum.spinelapper.workers.dev",
+    "worker_domain": "quantum-worker.workers.dev",
     "ws_path": "/vless",
     "default_tls": true,
     "tcp_host": "metro.proxy.rlwy.net",
