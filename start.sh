@@ -2,11 +2,11 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM MULTI-PROTOCOL  🕳️    ║"
+echo "║   🕳️  QUANTUM PANEL v3  🕳️         ║"
 echo "╚════════════════════════════════════════╝"
 
-DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
-mkdir -p /app/data /etc/xray /var/log
+DOMAIN=quantumpanel-production.up.railway.app
+mkdir -p /app/data /etc/xray /var/log /var/run/sshd
 
 # UUID
 if [ ! -f /app/data/uuid.txt ]; then
@@ -15,66 +15,54 @@ fi
 UUID=$(cat /app/data/uuid.txt)
 
 echo "🔑 UUID: $UUID"
-echo "🌐 Domain: $DOMAIN"
 
 # ============================================
-# ۱. Xray - VLESS + WS (Port 8443)
+# VLESS + WS on port 8443
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
     "inbounds": [{
-        "port": 8443,
-        "listen": "0.0.0.0",
-        "protocol": "vless",
+        "port": 8443, "listen": "0.0.0.0", "protocol": "vless",
         "settings": {"clients": [{"id": "$UUID", "level": 0}], "decryption": "none"},
         "streamSettings": {"network": "ws", "wsSettings": {"path": "/ws"}}
     }],
     "outbounds": [{"protocol": "freedom"}]
 }
 XRAYEOF
-
 /opt/xray/xray run -config /etc/xray/config.json &
-sleep 1
-echo "✅ VLESS on port 8443"
+echo "✅ VLESS on 8443 (metro.proxy.rlwy.net:35093)"
 
 # ============================================
-# ۲. SSH Server (Port 2222)
+# SSH on port 22
 # ============================================
 /usr/sbin/sshd -D -e &
-sleep 1
-echo "✅ SSH on port 2222"
+echo "✅ SSH on 22 (sakura.proxy.rlwy.net:53742)"
 
 # ============================================
-# ۳. Chisel (Port 8443 - same as Xray? No, port 8888)
+# Chisel on port 8888
 # ============================================
 chisel server --port 8888 --socks5 &
-sleep 1
-echo "✅ Chisel SOCKS5 on port 8888"
+echo "✅ Chisel on 8888 (tramway.proxy.rlwy.net:29499)"
 
-# ============================================
-# Save Info
-# ============================================
-cat > /app/data/info.json << INFOEOF
+# Save info
+cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
     "domain": "$DOMAIN",
-    "ssh_port": "2222",
-    "ssh_user": "root",
-    "ssh_pass": "quantum123",
-    "vless_port": "8443",
-    "chisel_port": "8888",
     "ws_path": "/ws",
-    "all_running": true
+    "vless": {"host": "metro.proxy.rlwy.net", "port": 35093},
+    "ssh": {"host": "sakura.proxy.rlwy.net", "port": 53742, "user": "root", "pass": "quantum123"},
+    "chisel": {"host": "tramway.proxy.rlwy.net", "port": 29499}
 }
-INFOEOF
+EOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
 echo "║   ✅ ALL SERVICES RUNNING             ║"
-echo "║   VLESS:  8443                        ║"
-echo "║   SSH:    2222                        ║"
-echo "║   Chisel: 8888                        ║"
+echo "║   VLESS:  metro:35093                 ║"
+echo "║   SSH:    sakura:53742                ║"
+echo "║   Chisel: tramway:29499               ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
