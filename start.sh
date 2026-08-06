@@ -2,11 +2,11 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM PANEL v5  🕳️         ║"
+echo "║   🕳️  QUANTUM PANEL v1.0.0 🕳️         ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=quantumpanel-production.up.railway.app
-mkdir -p /app/data /etc/xray /var/log /var/run/sshd /app/certs
+mkdir -p /app/data /etc/xray /var/log /var/run/sshd /etc/wireguard
 
 # UUIDs
 if [ ! -f /app/data/uuid.txt ]; then
@@ -24,18 +24,11 @@ if [ ! -f /app/data/trojan_pass.txt ]; then
 fi
 TROJAN_PASS=$(cat /app/data/trojan_pass.txt)
 
-if [ ! -f /app/data/ss_pass.txt ]; then
-    cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 16 > /app/data/ss_pass.txt
-fi
-SS_PASS=$(cat /app/data/ss_pass.txt)
-
-HY_PASS="quantum2024"
-
 echo "🔑 VLESS: $UUID"
 echo "🔑 VMess: $UUID_VMESS"
 
 # ============================================
-# Xray - 4 پروتکل روی 8443
+# Xray - VLESS, VMess, Trojan on 8443
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
@@ -49,41 +42,49 @@ cat > /etc/xray/config.json << XRAYEOF
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}}},
         {"port": 8443, "listen": "0.0.0.0", "protocol": "trojan",
             "settings": {"clients": [{"password": "$TROJAN_PASS"}]},
-            "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}},
-        {"port": 8443, "listen": "0.0.0.0", "protocol": "shadowsocks",
-            "settings": {"method": "aes-256-gcm", "password": "$SS_PASS", "network": "tcp,udp"},
-            "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}}
+            "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}}
     ],
     "outbounds": [{"protocol": "freedom", "tag": "direct"}]
 }
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray: VLESS, VMess, Trojan, SS on 8443"
+echo "✅ Xray: VLESS, VMess, Trojan on 8443"
 
 # ============================================
-# Hysteria2 روی پورت 8888 (جایگزین Chisel)
+# WireGuard Setup
 # ============================================
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /app/certs/key.pem -out /app/certs/cert.pem \
-  -subj "/CN=quantum" 2>/dev/null
+PRIVATE_KEY=$(wg genkey)
+PUBLIC_KEY=$(echo "$PRIVATE_KEY" | wg pubkey)
+CLIENT_PRIVATE=$(wg genkey)
+CLIENT_PUBLIC=$(echo "$CLIENT_PRIVATE" | wg pubkey)
+SERVER_IP="10.0.0.1/24"
+CLIENT_IP="10.0.0.2/32"
 
-cat > /etc/hysteria.yaml << HYEOF
-listen: :8888
-tls:
-  cert: /app/certs/cert.pem
-  key: /app/certs/key.pem
-auth:
-  type: password
-  password: $HY_PASS
-bandwidth:
-  up: 100 mbps
-  down: 500 mbps
-HYEOF
+ip link add wg0 type wireguard 2>/dev/null || true
+ip addr add $SERVER_IP dev wg0 2>/dev/null || true
 
-hysteria server -c /etc/hysteria.yaml > /var/log/hysteria.log 2>&1 &
-sleep 1
-echo "✅ Hysteria2 on port 8888"
+cat > /etc/wireguard/wg0.conf << WGEOF
+[Interface]
+PrivateKey = $PRIVATE_KEY
+ListenPort = 51820
+Address = $SERVER_IP
+PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostDown = iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+[Peer]
+PublicKey = $CLIENT_PUBLIC
+AllowedIPs = $CLIENT_IP
+WGEOF
+
+wg-quick up wg0 2>/dev/null || true
+echo "✅ WireGuard on UDP 51820"
+
+# ============================================
+# udp2raw - UDP→TCP for WireGuard
+# ============================================
+udp2raw -s -l 0.0.0.0:5555 -r 127.0.0.1:51820 --raw-mode faketcp -k "wgkey123" &
+echo "✅ udp2raw on TCP 5555 → UDP 51820"
 
 # ============================================
 # SSH
@@ -99,23 +100,21 @@ cat > /app/data/info.json << EOF
     "uuid": "$UUID",
     "uuid_vmess": "$UUID_VMESS",
     "trojan_pass": "$TROJAN_PASS",
-    "ss_pass": "$SS_PASS",
-    "hysteria_pass": "$HY_PASS",
     "domain": "$DOMAIN",
+    "server_public_key": "$PUBLIC_KEY",
+    "client_private_key": "$CLIENT_PRIVATE_KEY",
     "vless": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/vless"},
     "vmess": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/vmess"},
     "trojan": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/trojan"},
-    "ss": {"host": "metro.proxy.rlwy.net", "port": 35093, "path": "/ss"},
-    "hysteria": {"host": "tramway.proxy.rlwy.net", "port": 29499, "password": "$HY_PASS"},
+    "wireguard": {"host": "sakura.proxy.rlwy.net", "port": 53742},
     "ssh": {"host": "sakura.proxy.rlwy.net", "port": 53742, "user": "root", "pass": "quantum123"}
 }
 EOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   6 PROTOCOLS RUNNING                 ║"
-echo "║   VLESS, VMess, Trojan, SS            ║"
-echo "║   Hysteria2, SSH                      ║"
+echo "║   5 PROTOCOLS RUNNING                 ║"
+echo "║   VLESS, VMess, Trojan, WG, SSH       ║"
 echo "╚════════════════════════════════════════╝"
 echo ""
 
