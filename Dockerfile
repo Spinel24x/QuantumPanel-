@@ -18,6 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
 COPY . .
 RUN chmod +x /app/start.sh
 
-EXPOSE 8080 22 9000
+EXPOSE 8443 22 9000
 
 CMD ["/bin/bash", "/app/start.sh"]
