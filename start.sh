@@ -7,14 +7,8 @@ echo "╚═══════════════════════�
 
 mkdir -p /app/data /etc/xray /var/log /var/run/sshd
 
-# Load info from base config
-if [ -f /app/info.json ]; then
-    DOMAIN=$(python3 -c "import json; print(json.load(open('/app/info.json'))['railway_domain'])")
-else
-    DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
-fi
+DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
 
-# UUIDs - تولید اگر وجود نداشته باشن
 [ ! -f /app/data/uuid.txt ] && cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
 UUID=$(cat /app/data/uuid.txt)
 
@@ -32,21 +26,23 @@ echo "🔑 VMess UUID: $UUID_VMESS"
 echo "🔑 Trojan Pass: $TROJAN_PASS"
 echo "🔑 SS Pass: $SS_PASS"
 
-# Xray config
+# ============================================
+# Xray روی 8443
+# ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
     "log": {"loglevel": "warning"},
     "inbounds": [
-        {"port": 8080, "listen": "0.0.0.0", "protocol": "vless",
+        {"port": 8443, "listen": "0.0.0.0", "protocol": "vless",
             "settings": {"clients": [{"id": "$UUID", "level": 0}], "decryption": "none"},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vless"}}},
-        {"port": 8080, "listen": "0.0.0.0", "protocol": "vmess",
+        {"port": 8443, "listen": "0.0.0.0", "protocol": "vmess",
             "settings": {"clients": [{"id": "$UUID_VMESS", "level": 0}]},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/vmess"}}},
-        {"port": 8080, "listen": "0.0.0.0", "protocol": "trojan",
+        {"port": 8443, "listen": "0.0.0.0", "protocol": "trojan",
             "settings": {"clients": [{"password": "$TROJAN_PASS"}]},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}},
-        {"port": 8080, "listen": "0.0.0.0", "protocol": "shadowsocks",
+        {"port": 8443, "listen": "0.0.0.0", "protocol": "shadowsocks",
             "settings": {"method": "aes-256-gcm", "password": "$SS_PASS"},
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}}
     ],
@@ -55,15 +51,13 @@ cat > /etc/xray/config.json << XRAYEOF
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray on 8080"
+echo "✅ Xray on 8443"
 
 # SSH
 /usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
 echo "✅ SSH on 22"
 
-# ============================================
-# ذخیره info.json کامل با UUID و پسوردها
-# ============================================
+# Save UUIDs and passwords
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
@@ -73,7 +67,7 @@ cat > /app/data/info.json << EOF
 }
 EOF
 
-echo "✅ Info saved with all UUIDs and passwords"
+echo "✅ Info saved"
 echo ""
 cd /app
 exec python3 -m uvicorn app:app --host 0.0.0.0 --port 9000
