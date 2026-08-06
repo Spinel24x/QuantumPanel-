@@ -2,7 +2,7 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║   🕳️  QUANTUM PANEL v1.0.0 🕳️         ║"
+echo "║   🕳️  QUANTUM PANEL v6🕳️         ║"
 echo "╚════════════════════════════════════════╝"
 
 DOMAIN=quantumpanel-production.up.railway.app
