@@ -1,90 +1,116 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-import uvicorn, os, json
+import uvicorn, os, json, base64
 from pathlib import Path
 
-app = FastAPI(title="Quantum Panel v3")
+app = FastAPI(title="Quantum Panel v5")
 
 def load_info():
     try: return json.loads(Path("/app/data/info.json").read_text())
     except: return {
-        "uuid":"00000000-0000-0000-0000-000000000000",
-        "domain":"localhost","ws_path":"/ws",
-        "vless":{"host":"metro.proxy.rlwy.net","port":35093},
-        "ssh":{"host":"sakura.proxy.rlwy.net","port":53742,"user":"root","pass":"quantum123"},
-        "chisel":{"host":"tramway.proxy.rlwy.net","port":29499}
+        "uuid":"x","uuid_vmess":"x","trojan_pass":"x","ss_pass":"x","hysteria_pass":"quantum2024",
+        "domain":"localhost",
+        "vless":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/vless"},
+        "vmess":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/vmess"},
+        "trojan":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/trojan"},
+        "ss":{"host":"metro.proxy.rlwy.net","port":35093,"path":"/ss"},
+        "hysteria":{"host":"tramway.proxy.rlwy.net","port":29499,"password":"quantum2024"},
+        "ssh":{"host":"sakura.proxy.rlwy.net","port":53742,"user":"root","pass":"quantum123"}
     }
 
 @app.get("/api/configs")
 async def configs():
-    i=load_info()
-    u=i.get("uuid","");h=i.get("domain","");w=i.get("ws_path","/ws")
+    i = load_info()
+    h = i.get("domain","")
+    
+    vmess_config = {
+        "v": "2", "ps": "Quantum-VMess",
+        "add": i["vmess"]["host"], "port": i["vmess"]["port"],
+        "id": i["uuid_vmess"], "aid": 0, "scy": "auto",
+        "net": "ws", "type": "none", "host": h,
+        "path": i["vmess"]["path"], "tls": "none"
+    }
+    vmess_link = "vmess://" + base64.b64encode(json.dumps(vmess_config).encode()).decode()
     
     return JSONResponse({
-        "vless":{
-            "name":"VLESS + WebSocket","icon":"🟣",
-            "link":f"vless://{u}@{i['vless']['host']}:{i['vless']['port']}?encryption=none&security=none&type=ws&path={w}&host={h}#Quantum-VLESS",
-            "info":f"VLESS | {i['vless']['host']}:{i['vless']['port']} | WS"
+        "vless": {
+            "name":"VLESS + WS","icon":"🟣",
+            "link":f"vless://{i['uuid']}@{i['vless']['host']}:{i['vless']['port']}?encryption=none&security=none&type=ws&path={i['vless']['path']}&host={h}#Quantum-VLESS"
         },
-        "ssh":{
+        "vmess": {
+            "name":"VMess + WS","icon":"🟠",
+            "link":vmess_link
+        },
+        "trojan": {
+            "name":"Trojan + WS","icon":"🔴",
+            "link":f"trojan://{i['trojan_pass']}@{i['trojan']['host']}:{i['trojan']['port']}?security=none&type=ws&path={i['trojan']['path']}&host={h}#Quantum-Trojan"
+        },
+        "ss": {
+            "name":"Shadowsocks","icon":"🟡",
+            "link":f"ss://{base64.b64encode(f'aes-256-gcm:{i["ss_pass"]}'.encode()).decode()}@{i['ss']['host']}:{i['ss']['port']}?path={i['ss']['path']}&host={h}#Quantum-SS"
+        },
+        "hysteria2": {
+            "name":"Hysteria2","icon":"🟤",
+            "config": json.dumps({
+                "server": f"{i['hysteria']['host']}:{i['hysteria']['port']}",
+                "auth": i['hysteria_pass'],
+                "sni": "quantum",
+                "tls": {"sni": "quantum", "insecure": True},
+                "bandwidth": {"up": "50 mbps", "down": "200 mbps"}
+            }, indent=2)
+        },
+        "ssh": {
             "name":"SSH Tunnel","icon":"🔵",
             "command":f"ssh -D 1080 -p {i['ssh']['port']} -o ServerAliveInterval=30 {i['ssh']['user']}@{i['ssh']['host']}",
-            "info":f"SSH | {i['ssh']['host']}:{i['ssh']['port']} | SOCKS5:1080",
             "pass":i['ssh']['pass']
-        },
-        "chisel":{
-            "name":"Chisel SOCKS5","icon":"🟢",
-            "command":f"chisel client {i['chisel']['host']}:{i['chisel']['port']} 1080:socks",
-            "info":f"SOCKS5 | {i['chisel']['host']}:{i['chisel']['port']} | Client needed"
         }
     })
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return HTMLResponse("""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Quantum Panel</title>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Quantum Panel v5</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;color:#fff;font-family:'Courier New',monospace;min-height:100vh;overflow-x:hidden}
 canvas{position:fixed;top:0;left:0;z-index:0}
-.container{position:relative;z-index:2;max-width:900px;margin:0 auto;padding:20px}
+.container{position:relative;z-index:2;max-width:950px;margin:0 auto;padding:20px}
 .panel{background:rgba(5,5,20,0.88);border:1px solid rgba(102,0,204,0.25);border-radius:24px;padding:35px;margin-bottom:20px;box-shadow:0 0 80px rgba(102,0,204,0.15);backdrop-filter:blur(24px)}
 .title{font-size:2.8em;text-align:center;background:linear-gradient(135deg,#6600cc,#00ccff,#ff00cc,#6600cc);background-size:300% 300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shift 4s ease infinite;letter-spacing:8px}
 @keyframes shift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 .subtitle{text-align:center;color:rgba(102,0,204,0.7);margin:8px 0 25px;font-size:0.8em;letter-spacing:4px}
-.tabs{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-.tab{flex:1;min-width:140px;padding:18px 12px;background:rgba(102,0,204,0.12);border:1px solid rgba(102,0,204,0.2);border-radius:16px;text-align:center;cursor:pointer;color:#999;transition:all 0.3s}
+.tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:20px}
+.tab{padding:15px 10px;background:rgba(102,0,204,0.12);border:1px solid rgba(102,0,204,0.2);border-radius:14px;text-align:center;cursor:pointer;color:#999;transition:all 0.3s}
 .tab:hover{background:rgba(102,0,204,0.25);color:#ccc}
 .tab.active{background:#6600cc;color:#fff;border-color:#6600cc;box-shadow:0 0 30px rgba(102,0,204,0.4)}
-.tab .icon{font-size:2em;display:block;margin-bottom:6px}
-.tab .name{font-size:0.7em;letter-spacing:2px;text-transform:uppercase}
+.tab .icon{font-size:1.8em;display:block;margin-bottom:5px}
+.tab .name{font-size:0.65em;letter-spacing:2px;text-transform:uppercase}
 .config-box{background:rgba(0,0,0,0.7);border:1px solid rgba(102,0,204,0.2);border-radius:16px;padding:25px;position:relative;display:none;margin-top:15px}
 .config-box.active{display:block;animation:fadeIn 0.3s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .config-icon{font-size:3em;text-align:center;margin-bottom:10px}
 .config-name{text-align:center;color:#6600cc;font-size:1em;font-weight:bold;margin-bottom:5px;text-transform:uppercase;letter-spacing:3px}
-.config-info{text-align:center;color:#666;font-size:0.7em;margin-bottom:15px}
-.config-value{background:rgba(0,0,0,0.6);border:1px solid rgba(102,0,204,0.2);border-radius:12px;padding:18px;color:#00ff41;font-size:0.78em;word-break:break-all;line-height:1.9;white-space:pre-wrap;position:relative}
+.config-value{background:rgba(0,0,0,0.6);border:1px solid rgba(102,0,204,0.2);border-radius:12px;padding:18px;color:#00ff41;font-size:0.78em;word-break:break-all;line-height:1.9;white-space:pre-wrap;position:relative;max-height:300px;overflow-y:auto}
 .copy-btn{position:absolute;top:12px;right:12px;background:#6600cc;color:#fff;border:none;padding:8px 16px;border-radius:10px;cursor:pointer;font-family:'Courier New',monospace;font-size:0.7em;transition:all 0.3s;z-index:5}
 .copy-btn:hover{background:#9900ff;box-shadow:0 0 20px rgba(102,0,204,0.5)}
 .footer{text-align:center;margin-top:30px;color:#333;font-size:0.65em;letter-spacing:4px}
 .pulse{display:inline-block;width:8px;height:8px;background:#00ff41;border-radius:50%;animation:pulse 1.5s ease-in-out infinite;margin:0 5px}
 @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 10px #00ff41}50%{opacity:0.3;box-shadow:0 0 30px #00ff41}}
-@media(max-width:768px){.title{font-size:1.8em}.panel{padding:20px}.tab{min-width:100px;padding:12px}}
+@media(max-width:768px){.title{font-size:1.8em}.panel{padding:20px}}
 </style></head>
 <body><canvas id="c"></canvas>
 <div class="container"><div class="panel">
-<h1 class="title">QUANTUM</h1>
-<p class="subtitle"><span class="pulse"></span> MULTI-PROTOCOL VPN PANEL <span class="pulse"></span></p>
+<h1 class="title">QUANTUM v5</h1>
+<p class="subtitle"><span class="pulse"></span> 6 PROTOCOLS <span class="pulse"></span></p>
 <div class="tabs" id="tabs"></div>
 <div id="boxes"></div>
-<p class="footer">⬡ VLESS ⬡ SSH ⬡ CHISEL ⬡</p>
+<p class="footer">⬡ VLESS ⬡ VMess ⬡ Trojan ⬡ SS ⬡ Hysteria2 ⬡ SSH ⬡</p>
 </div></div>
 <script>
 const c=document.getElementById('c'),ctx=c.getContext('2d');c.width=window.innerWidth;c.height=window.innerHeight;
 const particles=[];
 class DNA{constructor(){this.reset()}
-reset(){this.x=Math.random()*c.width;this.y=Math.random()*c.height;this.len=Math.random()*150+50;this.angle=Math.random()*Math.PI*2;this.speed=Math.random()*0.5+0.2;this.amplitude=Math.random()*30+10;this.frequency=Math.random()*0.03+0.01;this.phase=Math.random()*Math.PI*2;this.color=[[102,0,204],[153,0,255],[0,204,255],[255,0,204],[0,255,204]][Math.floor(Math.random()*5)];this.life=0;this.maxLife=300+Math.random()*200}
+reset(){this.x=Math.random()*c.width;this.y=Math.random()*c.height;this.len=Math.random()*150+50;this.angle=Math.random()*Math.PI*2;this.speed=Math.random()*0.5+0.2;this.amplitude=Math.random()*30+10;this.phase=Math.random()*Math.PI*2;this.color=[[102,0,204],[153,0,255],[0,204,255],[255,0,204],[0,255,204]][Math.floor(Math.random()*5)];this.life=0;this.maxLife=300+Math.random()*200}
 update(){this.life++;if(this.life>this.maxLife)this.reset();this.phase+=0.02}
 draw(ctx){const alpha=Math.sin(Math.PI*this.life/this.maxLife)*0.5;ctx.strokeStyle=`rgba(${this.color[0]},${this.color[1]},${this.color[2]},${alpha})`;ctx.lineWidth=1.5;ctx.shadowBlur=10;ctx.shadowColor=`rgba(${this.color[0]},${this.color[1]},${this.color[2]},${alpha})`;ctx.beginPath();
 for(let i=0;i<=this.len;i+=5){const t=i/this.len;const x1=this.x+Math.cos(this.angle)*i+Math.sin(this.angle+this.phase+t*8)*this.amplitude;const y1=this.y+Math.sin(this.angle)*i+Math.cos(this.angle+this.phase+t*8)*this.amplitude*0.5;
@@ -101,10 +127,10 @@ const tc=document.getElementById('tabs'),bc=document.getElementById('boxes');tc.
 let first=true;
 for(const[k,v]of Object.entries(configs)){const t=document.createElement('div');t.className='tab'+(first?' active':'');t.innerHTML=`<span class="icon">${v.icon}</span><span class="name">${v.name}</span>`;t.onclick=(e)=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));e.target.closest('.tab').classList.add('active');document.querySelectorAll('.config-box').forEach(b=>b.classList.remove('active'));document.getElementById('box-'+k).classList.add('active')};tc.appendChild(t);
 const b=document.createElement('div');b.className='config-box'+(first?' active':'');b.id='box-'+k;
-let txt=v.link||v.command||'';
-b.innerHTML=`<div class="config-icon">${v.icon}</div><div class="config-name">${v.name}</div><div class="config-info">${v.info}</div><div class="config-value"><button class="copy-btn" onclick="copy('${k}',this)">COPY</button>${txt}</div>`;
+let txt=v.link||v.command||v.config||'';
+b.innerHTML=`<div class="config-icon">${v.icon}</div><div class="config-name">${v.name}</div><div class="config-value"><button class="copy-btn" onclick="copy('${k}',this)">COPY</button>${txt}</div>`;
 bc.appendChild(b);first=false}}
-function copy(k,btn){if(configs[k]){let t=configs[k].link||configs[k].command;navigator.clipboard.writeText(t);btn.textContent='✓ COPIED';btn.style.background='#00ff41';btn.style.color='#000';setTimeout(()=>{btn.textContent='COPY';btn.style.background='#6600cc';btn.style.color='#fff'},2000)}}
+function copy(k,btn){if(configs[k]){let t=configs[k].link||configs[k].command||configs[k].config;navigator.clipboard.writeText(t);btn.textContent='✓ COPIED';btn.style.background='#00ff41';btn.style.color='#000';setTimeout(()=>{btn.textContent='COPY';btn.style.background='#6600cc';btn.style.color='#fff'},2000)}}
 setTimeout(load,200);
 </script></body></html>""")
 
