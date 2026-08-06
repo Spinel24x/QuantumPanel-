@@ -23,13 +23,6 @@ async def configs(address: str = "", sni: str = "", cf: str = "0"):
         sni=sni if sni else ""
     )
     
-    # SSH
-    configs["ssh"] = {
-        "name": "SSH Tunnel", "icon": "🔵",
-        "command": f"ssh -D 1080 -p {info.get('ssh_port',22)} -o ServerAliveInterval=30 {info.get('ssh_user','root')}@{info.get('ssh_host','')}",
-        "pass": info.get("ssh_pass", "")
-    }
-    
     configs["settings"] = {
         "cf": use_cf,
         "clean_ips": ips.get("clean_ips", []),
