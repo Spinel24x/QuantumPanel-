@@ -2,68 +2,139 @@
 set -e
 
 echo "╔════════════════════════════════════════╗"
-echo "║     🕳️  QUANTUM CORE v2.0  🕳️        ║"
+echo "║   🕳️  QUANTUM VLESS CORE  🕳️        ║"
+echo "║   VLESS + TLS + WS + TCP Proxy       ║"
 echo "╚════════════════════════════════════════╝"
 
-mkdir -p /app/data /var/log
+# ============================================
+# متغیرها
+# ============================================
+DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
+TCP_PROXY_PORT=${RAILWAY_TCP_PROXY_PORT:-8443}
+PANEL_PORT=${PORT:-8000}
 
-# UUID
+# ============================================
+# ساخت دایرکتوری‌ها
+# ============================================
+mkdir -p /app/data /var/log/nginx /var/log/xray /etc/xray
+
+# ============================================
+# تولید UUID
+# ============================================
 if [ ! -f /app/data/uuid.txt ]; then
-    python3 -c "import uuid; print(str(uuid.uuid4()))" > /app/data/uuid.txt
+    cat /proc/sys/kernel/random/uuid > /app/data/uuid.txt
 fi
 
 UUID=$(cat /app/data/uuid.txt)
-PASSWORD="Quantum2024!@#"
-DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
-RAILWAY_TCP_PORT=${RAILWAY_TCP_PORT:-2222}
-RAILWAY_HTTP_PORT=${PORT:-8000}
 
-echo "🔐 Domain: $DOMAIN"
-echo "🔐 TCP Port: $RAILWAY_TCP_PORT"
-echo "🔐 Password: $PASSWORD"
+echo "🔑 UUID: $UUID"
+echo "🌐 Domain: $DOMAIN"
+echo "🔌 TCP Proxy Port: $TCP_PROXY_PORT"
 
 # ============================================
-# استارت SSH Server
+# ساخت کانفیگ Xray
 # ============================================
-echo "🔐 Starting SSH Server..."
-/usr/sbin/sshd -D -e &
-sleep 1
-echo "   ✅ SSH on ports: 2222, 443, 80"
-
-# ============================================
-# تولید کانفیگ
-# ============================================
-echo "📝 Generating config..."
-python3 -c "
-import json, os
-from pathlib import Path
-
-domain = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'localhost')
-tcp_port = os.getenv('RAILWAY_TCP_PORT', '2222')
-password = 'Quantum2024!@#'
-uuid = Path('/app/data/uuid.txt').read_text().strip()
-
-configs = {
-    'domain': domain,
-    'tcp_port': tcp_port,
-    'password': password,
-    'uuid': uuid
+cat > /etc/xray/config.json << XRAYEOF
+{
+    "log": {
+        "loglevel": "warning"
+    },
+    "inbounds": [{
+        "port": 10000,
+        "listen": "127.0.0.1",
+        "protocol": "vless",
+        "settings": {
+            "clients": [{
+                "id": "$UUID",
+                "level": 0
+            }],
+            "decryption": "none"
+        },
+        "streamSettings": {
+            "network": "ws",
+            "wsSettings": {
+                "path": "/ws"
+            }
+        },
+        "sniffing": {
+            "enabled": true,
+            "destOverride": ["http", "tls"]
+        }
+    }],
+    "outbounds": [{
+        "protocol": "freedom",
+        "tag": "direct"
+    }]
 }
+XRAYEOF
 
-Path('/app/data').mkdir(exist_ok=True)
-with open('/app/data/configs.json', 'w') as f:
-    json.dump(configs, f, indent=2)
+echo "✅ Xray config created"
 
-print(f'   ✅ Config saved: {domain}:{tcp_port}')
-"
+# ============================================
+# کپی nginx.conf
+# ============================================
+cp /app/nginx.conf /etc/nginx/nginx.conf
+echo "✅ Nginx config copied"
+
+# ============================================
+# استارت Xray
+# ============================================
+echo "🚀 Starting Xray..."
+/opt/xray/xray run -config /etc/xray/config.json > /var/log/xray/xray.log 2>&1 &
+sleep 2
+
+if pgrep -f xray > /dev/null; then
+    echo "   ✅ Xray started (PID: $(pgrep -f xray))"
+else
+    echo "   ❌ Xray failed to start"
+fi
+
+# ============================================
+# استارت Nginx
+# ============================================
+echo "🚀 Starting Nginx..."
+nginx -t 2>/dev/null && nginx -g "daemon off;" > /var/log/nginx/nginx.log 2>&1 &
+sleep 2
+
+if pgrep -f nginx > /dev/null; then
+    echo "   ✅ Nginx started (PID: $(pgrep -f nginx | head -1))"
+else
+    echo "   ❌ Nginx failed to start"
+fi
+
+# ============================================
+# ذخیره اطلاعات برای پنل
+# ============================================
+cat > /app/data/info.json << INFOEOF
+{
+    "uuid": "$UUID",
+    "domain": "$DOMAIN",
+    "tcp_proxy_port": "$TCP_PROXY_PORT",
+    "ws_path": "/ws",
+    "sni": "$DOMAIN",
+    "protocol": "vless",
+    "security": "tls",
+    "type": "ws",
+    "network": "ws",
+    "fingerprint": "chrome"
+}
+INFOEOF
 
 echo ""
 echo "╔════════════════════════════════════════╗"
-echo "║   ✅ ALL SERVICES STARTED             ║"
-echo "║   SSH:     2222, 443, 80              ║"
-echo "║   PANEL:   $RAILWAY_HTTP_PORT         ║"
+echo "║   ✅ QUANTUM VLESS IS READY           ║"
+echo "║   VLESS Port:  8443 (Nginx)           ║"
+echo "║   Xray Port:   10000 (Internal)       ║"
+echo "║   Panel Port:  $PANEL_PORT            ║"
+echo "║   WS Path:     /ws                    ║"
 echo "╚════════════════════════════════════════╝"
+echo ""
+echo "📱 VLESS Link:"
+echo "vless://$UUID@$DOMAIN:$TCP_PROXY_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&path=/ws&host=$DOMAIN#Quantum-VLESS"
+echo ""
 
+# ============================================
 # استارت پنل
+# ============================================
 cd /app
-exec python3 -m uvicorn app:app --host 0.0.0.0 --port $RAILWAY_HTTP_PORT
+exec python3 -m uvicorn app:app --host 0.0.0.0 --port 9000
