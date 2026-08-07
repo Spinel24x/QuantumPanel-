@@ -5,7 +5,7 @@ echo "╔═══════════════════════�
 echo "║   🕳️  QUANTUM PRO  🕳️              ║"
 echo "╚════════════════════════════════════════╝"
 
-mkdir -p /app/data /etc/xray /var/log /var/run/sshd
+mkdir -p /app/data /etc/xray /var/log
 
 DOMAIN=${RAILWAY_PUBLIC_DOMAIN:-localhost}
 
@@ -27,7 +27,7 @@ echo "🔑 Trojan Pass: $TROJAN_PASS"
 echo "🔑 SS Pass: $SS_PASS"
 
 # ============================================
-# Xray روی 8443
+# Xray - VLESS/VMess/Trojan/SS-WS روی 8443 + SS-TCP روی 22
 # ============================================
 cat > /etc/xray/config.json << XRAYEOF
 {
@@ -44,20 +44,18 @@ cat > /etc/xray/config.json << XRAYEOF
             "streamSettings": {"network": "ws", "wsSettings": {"path": "/trojan"}}},
         {"port": 8443, "listen": "0.0.0.0", "protocol": "shadowsocks",
             "settings": {"method": "aes-256-gcm", "password": "$SS_PASS"},
-            "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}}
+            "streamSettings": {"network": "ws", "wsSettings": {"path": "/ss"}}},
+        {"port": 22, "listen": "0.0.0.0", "protocol": "shadowsocks",
+            "settings": {"method": "aes-256-gcm", "password": "$SS_PASS"},
+            "streamSettings": {"network": "tcp"}}
     ],
     "outbounds": [{"protocol": "freedom", "tag": "direct"}]
 }
 XRAYEOF
 
 /opt/xray/xray run -config /etc/xray/config.json &
-echo "✅ Xray on 8443"
+echo "✅ Xray: VLESS/VMess/Trojan/SS-WS on 8443 | SS-TCP on 22"
 
-# SSH
-/usr/sbin/sshd -D -e > /var/log/sshd.log 2>&1 &
-echo "✅ SSH on 22"
-
-# Save UUIDs and passwords
 cat > /app/data/info.json << EOF
 {
     "uuid": "$UUID",
