@@ -79,58 +79,27 @@ function generate(){
   var cf=document.getElementById('cfCheck').checked?'1':'0';
   fetch('/api/configs?address='+encodeURIComponent(a)+'&sni='+encodeURIComponent(s)+'&cf='+cf)
     .then(function(r){return r.json()})
-    .then(function(d){
-      data=d;
-      show();
-    })
-    .catch(function(e){
-      document.getElementById('infoBar').textContent='Error: '+e;
-    });
+    .then(function(d){data=d;show();})
+    .catch(function(e){document.getElementById('infoBar').textContent='Error: '+e;});
 }
 function show(){
-  var tabRow=document.getElementById('tabRow');
-  var configs=document.getElementById('configs');
-  var infoBar=document.getElementById('infoBar');
+  var tabRow=document.getElementById('tabRow'),configs=document.getElementById('configs'),infoBar=document.getElementById('infoBar');
   tabRow.innerHTML='';configs.innerHTML='';
-  
-  if(data.connection){
-    var c=data.connection;
-    infoBar.textContent=c.address+':'+c.port+' | '+c.security.toUpperCase()+' | Host:'+c.host;
-  }
-  
+  if(data.connection){var c=data.connection;infoBar.textContent=c.address+':'+c.port+' | '+c.security.toUpperCase()+' | Host:'+c.host;}
   var first=true;
   for(var k in data){
     if(k==='settings'||k==='connection')continue;
     var v=data[k];
-    
-    var tb=document.createElement('div');
-    tb.className='tab-btn'+(first?' active':'');
-    tb.textContent=v.name;
-    tb.setAttribute('data-key',k);
-    tb.onclick=function(){
-      var key=this.getAttribute('data-key');
-      document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active')});
-      document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active')});
-      this.classList.add('active');
-      document.getElementById('content-'+key).classList.add('active');
-    };
+    var tb=document.createElement('div');tb.className='tab-btn'+(first?' active':'');tb.textContent=v.name;tb.setAttribute('data-key',k);
+    tb.onclick=function(){var key=this.getAttribute('data-key');document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active')});document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active')});this.classList.add('active');document.getElementById('content-'+key).classList.add('active')};
     tabRow.appendChild(tb);
-    
-    var tc=document.createElement('div');
-    tc.className='tab-content'+(first?' active':'');
-    tc.id='content-'+k;
-    var txt=v.link||'';
+    var tc=document.createElement('div');tc.className='tab-content'+(first?' active':'');tc.id='content-'+k;
+    var txt=v.link||v.config||'';
     tc.innerHTML='<h3>'+v.icon+' '+v.name+'</h3><div class="config-link"><button class="copy-btn" onclick="copyText(this)">COPY</button>'+txt+'</div>';
-    configs.appendChild(tc);
-    first=false;
+    configs.appendChild(tc);first=false;
   }
 }
-function copyText(btn){
-  var txt=btn.parentElement.textContent.replace('COPY','').trim();
-  navigator.clipboard.writeText(txt);
-  btn.textContent='OK';btn.style.background='#0f0';
-  var s=btn;setTimeout(function(){s.textContent='COPY';s.style.background='#60c'},2000);
-}
+function copyText(btn){var txt=btn.parentElement.textContent.replace('COPY','').trim();navigator.clipboard.writeText(txt);btn.textContent='OK';btn.style.background='#0f0';var s=btn;setTimeout(function(){s.textContent='COPY';s.style.background='#60c'},2000)}
 setTimeout(generate,300);
 </script></body></html>""")
 
