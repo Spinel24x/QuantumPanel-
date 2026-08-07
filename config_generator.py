@@ -84,40 +84,16 @@ def generate_trojan(password, conn):
     return link
 
 def generate_ss_ws(password, conn):
-    # JSON config کامل برای Xray Client
-    config = {
-        "servers": [{
-            "address": conn['address'],
-            "port": conn['port'],
-            "method": "aes-256-gcm",
-            "password": password,
-            "network": "ws",
-            "ws_opts": {
-                "path": "/ss",
-                "headers": {
-                    "Host": conn['host']
-                }
-            }
-        }],
-        "remarks": "Quantum-SS-WS"
-    }
-    return json.dumps(config, indent=2)
+    ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
+    link = f"ss://{ss_b64}@{conn['address']}:{conn['port']}?path=/ss&host={conn['host']}#Quantum-SS-WS"
+    return link
 
 def generate_ss_tcp(password, info):
     host = info.get("ss_tcp_host", "sakura.proxy.rlwy.net")
     port = info.get("ss_tcp_port", 53742)
-    
-    # JSON config کامل برای Xray Client
-    config = {
-        "servers": [{
-            "address": host,
-            "port": port,
-            "method": "aes-256-gcm",
-            "password": password
-        }],
-        "remarks": "Quantum-SS-TCP"
-    }
-    return json.dumps(config, indent=2)
+    ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
+    link = f"ss://{ss_b64}@{host}:{port}#Quantum-SS-TCP"
+    return link
 
 def generate_all(uuid, uuid_vmess, trojan_pass, ss_pass, use_cf=False, clean_ip="", sni=""):
     info = load_info()
@@ -127,7 +103,7 @@ def generate_all(uuid, uuid_vmess, trojan_pass, ss_pass, use_cf=False, clean_ip=
         "vless": {"name": "VLESS", "icon": "🟣", "link": generate_vless(uuid, conn)},
         "vmess": {"name": "VMess", "icon": "🟠", "link": generate_vmess(uuid_vmess, conn)},
         "trojan": {"name": "Trojan", "icon": "🔴", "link": generate_trojan(trojan_pass, conn)},
-        "ss_ws": {"name": "Shadowsocks WS", "icon": "🟡", "config": generate_ss_ws(ss_pass, conn)},
-        "ss_tcp": {"name": "Shadowsocks TCP", "icon": "🟢", "config": generate_ss_tcp(ss_pass, info)},
+        "ss_ws": {"name": "SS WS", "icon": "🟡", "link": generate_ss_ws(ss_pass, conn)},
+        "ss_tcp": {"name": "SS TCP", "icon": "🟢", "link": generate_ss_tcp(ss_pass, info)},
         "connection": conn
     }
