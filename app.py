@@ -94,7 +94,7 @@ function show(){
     tb.onclick=function(){var key=this.getAttribute('data-key');document.querySelectorAll('.tab-btn').forEach(function(x){x.classList.remove('active')});document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active')});this.classList.add('active');document.getElementById('content-'+key).classList.add('active')};
     tabRow.appendChild(tb);
     var tc=document.createElement('div');tc.className='tab-content'+(first?' active':'');tc.id='content-'+k;
-    var txt=v.link||v.config||'';
+    var txt=v.link||'';
     tc.innerHTML='<h3>'+v.icon+' '+v.name+'</h3><div class="config-link"><button class="copy-btn" onclick="copyText(this)">COPY</button>'+txt+'</div>';
     configs.appendChild(tc);first=false;
   }
