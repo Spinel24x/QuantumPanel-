@@ -84,12 +84,11 @@ def generate_trojan(password, conn):
     return link
 
 def generate_ss_ws(password, conn):
-    # لینک با plugin برای v2rayNG
     ss_b64 = base64.b64encode(f"aes-256-gcm:{password}".encode()).decode()
     plugin_opts = f"path=/ss;host={conn['host']};mode=websocket"
     link = f"ss://{ss_b64}@{conn['address']}:{conn['port']}?plugin=v2ray-plugin%3B{plugin_opts}#Quantum-SS-WS"
     return link
-
+    
 def generate_ss_tcp(password, info):
     host = info.get("ss_tcp_host", "sakura.proxy.rlwy.net")
     port = info.get("ss_tcp_port", 53742)
